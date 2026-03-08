@@ -48,6 +48,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  ShoppingBag,
   Trash2,
   TrendingUp,
   UserCog,
@@ -551,6 +552,16 @@ function AdminDashboard() {
     enabled: !!actor && !isFetching && paymentFilter === "all",
   });
 
+  // Dedicated query for purchases tab — always fetches all payments
+  const { data: allPurchasesData, isLoading: purchasesLoading } = useQuery({
+    queryKey: ["admin-purchases"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.adminGetPaymentHistory(BigInt(500), BigInt(0));
+    },
+    enabled: !!actor && !isFetching,
+  });
+
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const addUserMutation = useMutation({
@@ -928,6 +939,28 @@ function AdminDashboard() {
     (products ?? []).map((p) => [String(p.productId), p]),
   );
 
+  // Confirmed purchases (from dedicated purchases query)
+  const confirmedPurchases = (allPurchasesData ?? []).filter(
+    (p) => p.status === "confirmed",
+  );
+
+  // Purchase summary per product
+  const purchaseSummaryMap = new Map<
+    string,
+    { count: number; totalRevenue: number }
+  >();
+  for (const purchase of confirmedPurchases) {
+    const pid = String(purchase.productId);
+    const existing = purchaseSummaryMap.get(pid) ?? {
+      count: 0,
+      totalRevenue: 0,
+    };
+    purchaseSummaryMap.set(pid, {
+      count: existing.count + 1,
+      totalRevenue: existing.totalRevenue + purchase.amount,
+    });
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -996,7 +1029,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Stats</span>
+                <span>Stats</span>
               </TabsTrigger>
               <TabsTrigger
                 value="users"
@@ -1004,7 +1037,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <Users className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Users</span>
+                <span>Users</span>
               </TabsTrigger>
               <TabsTrigger
                 value="withdrawals"
@@ -1012,7 +1045,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <ArrowDownToLine className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">W/D</span>
+                <span>Withdrawals</span>
                 {pendingWdCount > 0 && (
                   <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 -ml-0.5">
                     {pendingWdCount}
@@ -1025,7 +1058,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <Wallet className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Txns</span>
+                <span>Txns</span>
               </TabsTrigger>
               <TabsTrigger
                 value="binary"
@@ -1033,7 +1066,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <GitFork className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Tree</span>
+                <span>Tree</span>
               </TabsTrigger>
               <TabsTrigger
                 value="products"
@@ -1041,7 +1074,15 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <Package className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Products</span>
+                <span>Products</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="purchases"
+                data-ocid="admin.purchases.tab"
+                className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <ShoppingBag className="w-3.5 h-3.5 shrink-0" />
+                <span>Purchases</span>
               </TabsTrigger>
               <TabsTrigger
                 value="access"
@@ -1049,7 +1090,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <UserCog className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Access</span>
+                <span>Access</span>
               </TabsTrigger>
               <TabsTrigger
                 value="payments"
@@ -1057,7 +1098,7 @@ function AdminDashboard() {
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
                 <CreditCard className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">Pays</span>
+                <span>Payments</span>
                 {pendingPayCount > 0 && (
                   <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 -ml-0.5">
                     {pendingPayCount}
@@ -1399,6 +1440,23 @@ function AdminDashboard() {
 
         {/* ── Tab 3: Withdrawals ────────────────────────────────────────────── */}
         <TabsContent value="withdrawals" className="px-4 pb-8 pt-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-display text-lg font-bold text-foreground mb-0.5">
+                Withdrawal Approvals
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Review and process withdrawal requests
+              </p>
+            </div>
+            {pendingWdCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-full px-3 py-1">
+                <Clock className="w-3 h-3" />
+                {pendingWdCount} pending
+              </span>
+            )}
+          </div>
           {/* Filter chips */}
           <div className="flex gap-2 mb-4">
             <button
@@ -2036,10 +2094,174 @@ function AdminDashboard() {
               ))}
             </div>
           )}
+
+          {/* Purchase Summary */}
+          {!purchasesLoading && confirmedPurchases.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mt-6"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <ShoppingBag className="w-4 h-4 text-primary" />
+                <h3 className="font-display text-sm font-bold text-foreground">
+                  Purchase Summary
+                </h3>
+                <span className="text-xs text-muted-foreground">
+                  ({confirmedPurchases.length} confirmed)
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {sortedProducts
+                  .filter((p) => purchaseSummaryMap.has(String(p.productId)))
+                  .map((product, i) => {
+                    const summary = purchaseSummaryMap.get(
+                      String(product.productId),
+                    )!;
+                    return (
+                      <motion.div
+                        key={String(product.productId)}
+                        data-ocid={`admin.products.purchase.card.${i + 1}`}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: Math.min(i * 0.05, 0.2) }}
+                        className="bg-emerald-50 border border-emerald-200 rounded-xl p-3"
+                      >
+                        <p className="text-xs font-semibold text-emerald-900 leading-tight line-clamp-2 mb-2">
+                          {product.name}
+                        </p>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full bg-emerald-600 text-white text-[10px] font-bold px-1.5">
+                            {summary.count}
+                          </span>
+                          <p className="text-xs font-bold text-emerald-700">
+                            {formatINR(summary.totalRevenue)}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+              </div>
+            </motion.div>
+          )}
+        </TabsContent>
+
+        {/* ── Tab 7a: Purchases ─────────────────────────────────────────────── */}
+        <TabsContent value="purchases" className="px-4 pb-8 pt-4">
+          {/* Header */}
+          <div className="mb-4">
+            <h2 className="font-display text-lg font-bold text-foreground mb-0.5">
+              Product Purchase History
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              All confirmed product purchases
+            </p>
+          </div>
+
+          {purchasesLoading ? (
+            <div
+              data-ocid="admin.purchases.loading_state"
+              className="space-y-3"
+            >
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
+          ) : confirmedPurchases.length === 0 ? (
+            <div
+              data-ocid="admin.purchases.empty_state"
+              className="text-center py-12 text-muted-foreground"
+            >
+              <ShoppingBag className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-semibold">No confirmed purchases yet</p>
+              <p className="text-sm mt-1">
+                Confirmed purchases will appear here
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {confirmedPurchases.map((purchase: PaymentRecord, i) => {
+                const purchaseUser = userMap.get(String(purchase.userId));
+                const purchaseProduct = productMap.get(
+                  String(purchase.productId),
+                );
+                return (
+                  <motion.div
+                    key={String(purchase.paymentId)}
+                    data-ocid={`admin.purchases.item.${i + 1}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.04, 0.3) }}
+                    className="bg-card border border-emerald-200 rounded-xl p-4"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <p className="font-bold text-foreground text-sm truncate">
+                            {purchaseUser?.name ??
+                              `User …${String(purchase.userId).slice(-6)}`}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] border font-semibold bg-emerald-50 text-emerald-700 border-emerald-200"
+                          >
+                            Confirmed
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {purchaseUser
+                            ? `+91 ${purchaseUser.mobile}`
+                            : `ID: …${String(purchase.userId).slice(-6)}`}
+                        </p>
+                      </div>
+                      <p className="font-display text-lg font-black text-emerald-700 shrink-0">
+                        {formatINR(purchase.amount)}
+                      </p>
+                    </div>
+
+                    {purchaseProduct && (
+                      <p className="text-xs text-muted-foreground mb-0.5">
+                        📦 {purchaseProduct.name}
+                      </p>
+                    )}
+                    {purchase.upiTransactionRef && (
+                      <p className="text-xs text-muted-foreground mb-0.5">
+                        🔑 UTR:{" "}
+                        <span className="font-mono font-semibold text-foreground">
+                          {purchase.upiTransactionRef}
+                        </span>
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      🕐 {formatDateTime(purchase.timestamp)}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Tab 8: Payments ──────────────────────────────────────────────── */}
         <TabsContent value="payments" className="px-4 pb-8 pt-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-display text-lg font-bold text-foreground mb-0.5">
+                Payment Approvals
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Review and approve user payments
+              </p>
+            </div>
+            {pendingPayCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold rounded-full px-3 py-1">
+                <Clock className="w-3 h-3" />
+                {pendingPayCount} pending
+              </span>
+            )}
+          </div>
           {/* Filter chips */}
           <div className="flex gap-2 mb-4">
             <button

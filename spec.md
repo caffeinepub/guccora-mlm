@@ -1,50 +1,26 @@
 # Guccora MLM
 
 ## Current State
-- Three product plans (Starter ₹599, Growth ₹999, Premium ₹1999) are displayed on the products page
-- Products page shows plan cards with a purchase button, but no payment flow
-- `purchaseProduct` backend call exists but doesn't activate the user account or record a payment
-- Admin panel has Stats, Users, Withdrawals, Transactions, Binary Tree, Products, and Access tabs
-- No dedicated payment history in admin panel
+The admin panel at /admin has 8 tabs: Stats, Users, W/D (Withdrawals), Txns (Transactions), Tree (Binary), Products, Access, and Pays (Payments). All core functionality exists including add/edit/delete products, withdrawal approval, and payment confirmation. The "Pays" tab shows pending/all UPI payment records submitted by users.
 
 ## Requested Changes (Diff)
 
 ### Add
-- UPI payment modal on the products page: show a QR code or UPI ID, an input for UTR/transaction reference number, and a "Confirm Payment" button
-- `PaymentRecord` type in backend: stores paymentId, userId, productId, amount, upiTransactionRef, status (pending/confirmed), timestamp, upiId
-- `submitPaymentRequest` backend function: creates a PaymentRecord with status "pending", to be reviewed by admin
-- `adminConfirmPayment` backend function: confirms a payment, activates the user account, and triggers direct income to sponsor
-- `adminGetPaymentHistory` backend function: returns all payment records (paginated)
-- `adminGetPendingPayments` backend function: returns pending payment records
-- "Payments" tab in admin panel showing all payment records with confirm/reject actions
-- Admin stats card for total payments and pending payments count
-- Payment history section on admin dashboard
+- A dedicated "Purchases" tab in the admin panel showing product purchase history (calls `adminGetPaymentHistory`) with clear columns: user name, product name, amount, date, status
+- "View Product Purchases" section under Products tab that shows per-product purchase count and revenue summary
 
 ### Modify
-- `purchaseProduct`: instead of directly processing, now creates a payment request and shows UPI payment dialog
-- Products page: after clicking Purchase button, open a UPI payment dialog with company UPI ID, amount, and a field to enter UTR reference number
-- Admin Stats tab: add a "Payments" stat card
-- `adminGetDashboardStats`: include totalPayments and pendingPaymentsCount in response
+- Rename the "Pays" tab to "Payments" with full label visible (not just icon) to clarify it covers payment approval
+- Improve the Payments tab header to clearly say "Payment Approval" with pending count badge more prominent
+- Make the Products tab show a "Purchases" summary section below the product list (total purchases per product from payment history)
+- Ensure withdrawal tab is clearly labeled "Withdrawals" and approve/reject buttons are prominent
 
 ### Remove
 - Nothing removed
 
 ## Implementation Plan
-1. Update backend (main.mo):
-   - Add `PaymentRecord` type and `payments` map
-   - Add `nextPaymentId` counter
-   - Add `submitPaymentRequest(userId, productId, upiTransactionRef)` - creates pending payment, returns PaymentId
-   - Add `adminConfirmPayment(paymentId)` - confirms payment, activates user, distributes direct income to sponsor, records transaction
-   - Add `adminRejectPayment(paymentId, note)` - rejects payment, updates status
-   - Add `adminGetPaymentHistory(limit, offset)` - returns all payments sorted by timestamp desc
-   - Add `adminGetPendingPayments()` - returns pending payments
-   - Update `adminGetDashboardStats` to include totalPayments and pendingPaymentsCount
-2. Update frontend ProductsPage:
-   - Add UPI payment dialog component
-   - On "Purchase" click: open dialog with UPI ID (guccora@upi), amount, QR code placeholder, UTR input
-   - On confirm: call `submitPaymentRequest`, show success toast with "Payment submitted, awaiting admin confirmation"
-3. Update frontend AdminPage:
-   - Add "Payments" tab with pending/all filter
-   - Show payment records with user name, amount, UPI ref, status, timestamp
-   - Confirm and Reject buttons per pending payment
-   - Add payments stat card to Stats tab
+1. In AdminPage.tsx tab list: rename "Pays" label to "Payments" (already partially there but hidden on small screens — make the label always visible)
+2. Add a "Purchases" tab between Products and Access tabs that shows all confirmed payment records as a purchase history table with user, product, amount, date columns
+3. Add a product purchases summary inside the Products tab — a collapsible section showing confirmed purchase count per product, pulled from allPayments filtered to `status === "confirmed"`
+4. Improve tab labels to show text on all screen sizes (remove `hidden sm:inline` restrictions for key tabs)
+5. Update withdrawal tab to show "Withdrawals" as full text and approve button to say "Approve" with green styling
