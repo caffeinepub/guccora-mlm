@@ -48,7 +48,7 @@ export interface User {
   'joinDate' : bigint,
   'userId' : UserId,
   'name' : string,
-  'role' : UserRole,
+  'role' : UserType,
   'sponsorId' : [] | [UserId],
   'rightChildId' : [] | [UserId],
   'leftChildId' : [] | [UserId],
@@ -66,10 +66,10 @@ export interface UserProfile {
   'walletBalance' : number,
 }
 export type UserRole = { 'admin' : null } |
-  { 'user' : null };
-export type UserRole__1 = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export type UserType = { 'admin' : null } |
+  { 'user' : null };
 export type WithdrawalId = bigint;
 export interface WithdrawalRequest {
   'status' : string,
@@ -86,11 +86,11 @@ export interface WithdrawalRequest {
 }
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
-  'adminAddUser' : ActorMethod<[string, string, string, string], bigint>,
-  'adminApproveWithdrawal' : ActorMethod<[bigint, string], undefined>,
-  'adminConfirmPayment' : ActorMethod<[bigint], undefined>,
+  'adminAddUser' : ActorMethod<[string, string, string, string], UserId>,
+  'adminApproveWithdrawal' : ActorMethod<[WithdrawalId, string], undefined>,
+  'adminConfirmPayment' : ActorMethod<[PaymentId], undefined>,
   'adminCreateProduct' : ActorMethod<[string, string, number], undefined>,
-  'adminCreditIncome' : ActorMethod<[bigint, number, string], undefined>,
+  'adminCreditIncome' : ActorMethod<[UserId, number, string], undefined>,
   'adminGetAllTransactions' : ActorMethod<[bigint, bigint], Array<Transaction>>,
   'adminGetAllUsers' : ActorMethod<[bigint, bigint], Array<User>>,
   'adminGetAllWithdrawals' : ActorMethod<
@@ -115,40 +115,40 @@ export interface _SERVICE {
   >,
   'adminGetPendingPayments' : ActorMethod<[], Array<PaymentRecord>>,
   'adminGetPendingWithdrawals' : ActorMethod<[], Array<WithdrawalRequest>>,
-  'adminRejectPayment' : ActorMethod<[bigint, string], undefined>,
-  'adminRejectWithdrawal' : ActorMethod<[bigint, string], undefined>,
+  'adminRejectPayment' : ActorMethod<[PaymentId, string], undefined>,
+  'adminRejectWithdrawal' : ActorMethod<[WithdrawalId, string], undefined>,
   'adminSetBinaryPosition' : ActorMethod<
-    [bigint, bigint, { 'left' : null } | { 'right' : null }],
+    [UserId, UserId, { 'left' : null } | { 'right' : null }],
     undefined
   >,
-  'adminToggleProduct' : ActorMethod<[bigint], undefined>,
-  'assignCallerUserRole' : ActorMethod<[Principal, UserRole__1], undefined>,
+  'adminToggleProduct' : ActorMethod<[ProductId], undefined>,
+  'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'generateOTP' : ActorMethod<[string], string>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
-  'getCallerUserRole' : ActorMethod<[], UserRole__1>,
+  'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getProducts' : ActorMethod<[], Array<Product>>,
-  'getTransactions' : ActorMethod<[bigint, bigint, bigint], Array<Transaction>>,
-  'getUserById' : ActorMethod<[bigint], User>,
+  'getTransactions' : ActorMethod<[UserId, bigint, bigint], Array<Transaction>>,
+  'getUserById' : ActorMethod<[UserId], User>,
   'getUserByMobile' : ActorMethod<[string], User>,
   'getUserByReferralCode' : ActorMethod<[string], User>,
-  'getUserPayments' : ActorMethod<[bigint], Array<PaymentRecord>>,
+  'getUserPayments' : ActorMethod<[UserId], Array<PaymentRecord>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getWallet' : ActorMethod<
     [bigint],
     { 'balance' : number, 'transactions' : Array<Transaction> }
   >,
-  'getWithdrawalRequests' : ActorMethod<[bigint], Array<WithdrawalRequest>>,
+  'getWithdrawalRequests' : ActorMethod<[UserId], Array<WithdrawalRequest>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'loginUser' : ActorMethod<[string, string], User>,
   'loginUserByMobile' : ActorMethod<[string], User>,
-  'purchaseProduct' : ActorMethod<[bigint, bigint], undefined>,
+  'purchaseProduct' : ActorMethod<[UserId, ProductId], undefined>,
   'registerUser' : ActorMethod<[string, string, string, string, string], User>,
   'requestWithdrawal' : ActorMethod<
-    [bigint, number, string, string, string, string],
+    [UserId, number, string, string, string, string],
     undefined
   >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  'submitPaymentRequest' : ActorMethod<[bigint, bigint, string], bigint>,
+  'submitPaymentRequest' : ActorMethod<[UserId, ProductId, string], PaymentId>,
   'verifyOTP' : ActorMethod<[string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;

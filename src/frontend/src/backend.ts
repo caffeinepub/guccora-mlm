@@ -96,7 +96,7 @@ export interface User {
     joinDate: bigint;
     userId: UserId;
     name: string;
-    role: UserRole;
+    role: UserType;
     sponsorId?: UserId;
     rightChildId?: UserId;
     leftChildId?: UserId;
@@ -160,12 +160,12 @@ export interface UserProfile {
 }
 export enum UserRole {
     admin = "admin",
-    user = "user"
-}
-export enum UserRole__1 {
-    admin = "admin",
     user = "user",
     guest = "guest"
+}
+export enum UserType {
+    admin = "admin",
+    user = "user"
 }
 export enum Variant_left_right {
     left = "left",
@@ -173,11 +173,11 @@ export enum Variant_left_right {
 }
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
-    adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<bigint>;
-    adminApproveWithdrawal(reqId: bigint, adminNote: string): Promise<void>;
-    adminConfirmPayment(paymentId: bigint): Promise<void>;
+    adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<UserId>;
+    adminApproveWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
+    adminConfirmPayment(paymentId: PaymentId): Promise<void>;
     adminCreateProduct(name: string, description: string, price: number): Promise<void>;
-    adminCreditIncome(userId: bigint, amount: number, note: string): Promise<void>;
+    adminCreditIncome(userId: UserId, amount: number, note: string): Promise<void>;
     adminGetAllTransactions(limit: bigint, offset: bigint): Promise<Array<Transaction>>;
     adminGetAllUsers(limit: bigint, offset: bigint): Promise<Array<User>>;
     adminGetAllWithdrawals(limit: bigint, offset: bigint): Promise<Array<WithdrawalRequest>>;
@@ -193,37 +193,37 @@ export interface backendInterface {
     adminGetPaymentHistory(limit: bigint, offset: bigint): Promise<Array<PaymentRecord>>;
     adminGetPendingPayments(): Promise<Array<PaymentRecord>>;
     adminGetPendingWithdrawals(): Promise<Array<WithdrawalRequest>>;
-    adminRejectPayment(paymentId: bigint, note: string): Promise<void>;
-    adminRejectWithdrawal(reqId: bigint, adminNote: string): Promise<void>;
-    adminSetBinaryPosition(parentUserId: bigint, childUserId: bigint, position: Variant_left_right): Promise<void>;
-    adminToggleProduct(productId: bigint): Promise<void>;
-    assignCallerUserRole(user: Principal, role: UserRole__1): Promise<void>;
+    adminRejectPayment(paymentId: PaymentId, note: string): Promise<void>;
+    adminRejectWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
+    adminSetBinaryPosition(parentUserId: UserId, childUserId: UserId, position: Variant_left_right): Promise<void>;
+    adminToggleProduct(productId: ProductId): Promise<void>;
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     generateOTP(mobile: string): Promise<string>;
     getCallerUserProfile(): Promise<UserProfile | null>;
-    getCallerUserRole(): Promise<UserRole__1>;
+    getCallerUserRole(): Promise<UserRole>;
     getProducts(): Promise<Array<Product>>;
-    getTransactions(userId: bigint, limit: bigint, offset: bigint): Promise<Array<Transaction>>;
-    getUserById(userId: bigint): Promise<User>;
+    getTransactions(userId: UserId, limit: bigint, offset: bigint): Promise<Array<Transaction>>;
+    getUserById(userId: UserId): Promise<User>;
     getUserByMobile(mobile: string): Promise<User>;
     getUserByReferralCode(code: string): Promise<User>;
-    getUserPayments(userId: bigint): Promise<Array<PaymentRecord>>;
+    getUserPayments(userId: UserId): Promise<Array<PaymentRecord>>;
     getUserProfile(userPrincipal: Principal): Promise<UserProfile | null>;
     getWallet(userId: bigint): Promise<{
         balance: number;
         transactions: Array<Transaction>;
     }>;
-    getWithdrawalRequests(userId: bigint): Promise<Array<WithdrawalRequest>>;
+    getWithdrawalRequests(userId: UserId): Promise<Array<WithdrawalRequest>>;
     isCallerAdmin(): Promise<boolean>;
     loginUser(mobile: string, otp: string): Promise<User>;
     loginUserByMobile(mobile: string): Promise<User>;
-    purchaseProduct(userId: bigint, productId: bigint): Promise<void>;
+    purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
     registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
-    requestWithdrawal(userId: bigint, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
+    requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    submitPaymentRequest(userId: bigint, productId: bigint, upiTransactionRef: string): Promise<bigint>;
+    submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
     verifyOTP(mobile: string, otp: string): Promise<boolean>;
 }
-import type { Mobile as _Mobile, Transaction as _Transaction, TxId as _TxId, User as _User, UserId as _UserId, UserProfile as _UserProfile, UserRole as _UserRole, UserRole__1 as _UserRole__1, WithdrawalId as _WithdrawalId, WithdrawalRequest as _WithdrawalRequest } from "./declarations/backend.did.d.ts";
+import type { Mobile as _Mobile, Transaction as _Transaction, TxId as _TxId, User as _User, UserId as _UserId, UserProfile as _UserProfile, UserRole as _UserRole, UserType as _UserType, WithdrawalId as _WithdrawalId, WithdrawalRequest as _WithdrawalRequest } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _initializeAccessControlWithSecret(arg0: string): Promise<void> {
@@ -240,7 +240,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminAddUser(arg0: string, arg1: string, arg2: string, arg3: string): Promise<bigint> {
+    async adminAddUser(arg0: string, arg1: string, arg2: string, arg3: string): Promise<UserId> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminAddUser(arg0, arg1, arg2, arg3);
@@ -254,7 +254,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminApproveWithdrawal(arg0: bigint, arg1: string): Promise<void> {
+    async adminApproveWithdrawal(arg0: WithdrawalId, arg1: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminApproveWithdrawal(arg0, arg1);
@@ -268,7 +268,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminConfirmPayment(arg0: bigint): Promise<void> {
+    async adminConfirmPayment(arg0: PaymentId): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminConfirmPayment(arg0);
@@ -296,7 +296,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminCreditIncome(arg0: bigint, arg1: number, arg2: string): Promise<void> {
+    async adminCreditIncome(arg0: UserId, arg1: number, arg2: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminCreditIncome(arg0, arg1, arg2);
@@ -416,7 +416,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n12(this._uploadFile, this._downloadFile, result);
         }
     }
-    async adminRejectPayment(arg0: bigint, arg1: string): Promise<void> {
+    async adminRejectPayment(arg0: PaymentId, arg1: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminRejectPayment(arg0, arg1);
@@ -430,7 +430,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminRejectWithdrawal(arg0: bigint, arg1: string): Promise<void> {
+    async adminRejectWithdrawal(arg0: WithdrawalId, arg1: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminRejectWithdrawal(arg0, arg1);
@@ -444,7 +444,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminSetBinaryPosition(arg0: bigint, arg1: bigint, arg2: Variant_left_right): Promise<void> {
+    async adminSetBinaryPosition(arg0: UserId, arg1: UserId, arg2: Variant_left_right): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminSetBinaryPosition(arg0, arg1, to_candid_variant_n16(this._uploadFile, this._downloadFile, arg2));
@@ -458,7 +458,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminToggleProduct(arg0: bigint): Promise<void> {
+    async adminToggleProduct(arg0: ProductId): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminToggleProduct(arg0);
@@ -472,17 +472,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async assignCallerUserRole(arg0: Principal, arg1: UserRole__1): Promise<void> {
+    async assignCallerUserRole(arg0: Principal, arg1: UserRole): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole__1_n17(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n17(this._uploadFile, this._downloadFile, arg1));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole__1_n17(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.assignCallerUserRole(arg0, to_candid_UserRole_n17(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -514,18 +514,18 @@ export class Backend implements backendInterface {
             return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getCallerUserRole(): Promise<UserRole__1> {
+    async getCallerUserRole(): Promise<UserRole> {
         if (this.processError) {
             try {
                 const result = await this.actor.getCallerUserRole();
-                return from_candid_UserRole__1_n20(this._uploadFile, this._downloadFile, result);
+                return from_candid_UserRole_n20(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.getCallerUserRole();
-            return from_candid_UserRole__1_n20(this._uploadFile, this._downloadFile, result);
+            return from_candid_UserRole_n20(this._uploadFile, this._downloadFile, result);
         }
     }
     async getProducts(): Promise<Array<Product>> {
@@ -542,7 +542,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getTransactions(arg0: bigint, arg1: bigint, arg2: bigint): Promise<Array<Transaction>> {
+    async getTransactions(arg0: UserId, arg1: bigint, arg2: bigint): Promise<Array<Transaction>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getTransactions(arg0, arg1, arg2);
@@ -556,7 +556,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n1(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getUserById(arg0: bigint): Promise<User> {
+    async getUserById(arg0: UserId): Promise<User> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserById(arg0);
@@ -598,7 +598,7 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getUserPayments(arg0: bigint): Promise<Array<PaymentRecord>> {
+    async getUserPayments(arg0: UserId): Promise<Array<PaymentRecord>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserPayments(arg0);
@@ -643,7 +643,7 @@ export class Backend implements backendInterface {
             return from_candid_record_n22(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getWithdrawalRequests(arg0: bigint): Promise<Array<WithdrawalRequest>> {
+    async getWithdrawalRequests(arg0: UserId): Promise<Array<WithdrawalRequest>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getWithdrawalRequests(arg0);
@@ -699,7 +699,7 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async purchaseProduct(arg0: bigint, arg1: bigint): Promise<void> {
+    async purchaseProduct(arg0: UserId, arg1: ProductId): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.purchaseProduct(arg0, arg1);
@@ -727,7 +727,7 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async requestWithdrawal(arg0: bigint, arg1: number, arg2: string, arg3: string, arg4: string, arg5: string): Promise<void> {
+    async requestWithdrawal(arg0: UserId, arg1: number, arg2: string, arg3: string, arg4: string, arg5: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.requestWithdrawal(arg0, arg1, arg2, arg3, arg4, arg5);
@@ -755,7 +755,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async submitPaymentRequest(arg0: bigint, arg1: bigint, arg2: string): Promise<bigint> {
+    async submitPaymentRequest(arg0: UserId, arg1: ProductId, arg2: string): Promise<PaymentId> {
         if (this.processError) {
             try {
                 const result = await this.actor.submitPaymentRequest(arg0, arg1, arg2);
@@ -787,10 +787,10 @@ export class Backend implements backendInterface {
 function from_candid_Transaction_n2(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _Transaction): Transaction {
     return from_candid_record_n3(_uploadFile, _downloadFile, value);
 }
-function from_candid_UserRole__1_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole__1): UserRole__1 {
+function from_candid_UserRole_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
     return from_candid_variant_n21(_uploadFile, _downloadFile, value);
 }
-function from_candid_UserRole_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserRole): UserRole {
+function from_candid_UserType_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _UserType): UserType {
     return from_candid_variant_n11(_uploadFile, _downloadFile, value);
 }
 function from_candid_User_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _User): User {
@@ -904,7 +904,7 @@ function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint
     joinDate: bigint;
     userId: _UserId;
     name: string;
-    role: _UserRole;
+    role: _UserType;
     sponsorId: [] | [_UserId];
     rightChildId: [] | [_UserId];
     leftChildId: [] | [_UserId];
@@ -917,7 +917,7 @@ function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint
     joinDate: bigint;
     userId: UserId;
     name: string;
-    role: UserRole;
+    role: UserType;
     sponsorId?: UserId;
     rightChildId?: UserId;
     leftChildId?: UserId;
@@ -931,7 +931,7 @@ function from_candid_record_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint
         joinDate: value.joinDate,
         userId: value.userId,
         name: value.name,
-        role: from_candid_UserRole_n10(_uploadFile, _downloadFile, value.role),
+        role: from_candid_UserType_n10(_uploadFile, _downloadFile, value.role),
         sponsorId: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.sponsorId)),
         rightChildId: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.rightChildId)),
         leftChildId: record_opt_to_undefined(from_candid_opt_n5(_uploadFile, _downloadFile, value.leftChildId)),
@@ -944,8 +944,8 @@ function from_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Ui
     admin: null;
 } | {
     user: null;
-}): UserRole {
-    return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : value;
+}): UserType {
+    return "admin" in value ? UserType.admin : "user" in value ? UserType.user : value;
 }
 function from_candid_variant_n21(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     admin: null;
@@ -953,8 +953,8 @@ function from_candid_variant_n21(_uploadFile: (file: ExternalBlob) => Promise<Ui
     user: null;
 } | {
     guest: null;
-}): UserRole__1 {
-    return "admin" in value ? UserRole__1.admin : "user" in value ? UserRole__1.user : "guest" in value ? UserRole__1.guest : value;
+}): UserRole {
+    return "admin" in value ? UserRole.admin : "user" in value ? UserRole.user : "guest" in value ? UserRole.guest : value;
 }
 function from_candid_vec_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_Transaction>): Array<Transaction> {
     return value.map((x)=>from_candid_Transaction_n2(_uploadFile, _downloadFile, x));
@@ -965,7 +965,7 @@ function from_candid_vec_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
 function from_candid_vec_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_User>): Array<User> {
     return value.map((x)=>from_candid_User_n7(_uploadFile, _downloadFile, x));
 }
-function to_candid_UserRole__1_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole__1): _UserRole__1 {
+function to_candid_UserRole_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n18(_uploadFile, _downloadFile, value);
 }
 function to_candid_variant_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Variant_left_right): {
@@ -979,18 +979,18 @@ function to_candid_variant_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint
         right: null
     } : value;
 }
-function to_candid_variant_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole__1): {
+function to_candid_variant_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): {
     admin: null;
 } | {
     user: null;
 } | {
     guest: null;
 } {
-    return value == UserRole__1.admin ? {
+    return value == UserRole.admin ? {
         admin: null
-    } : value == UserRole__1.user ? {
+    } : value == UserRole.user ? {
         user: null
-    } : value == UserRole__1.guest ? {
+    } : value == UserRole.guest ? {
         guest: null
     } : value;
 }

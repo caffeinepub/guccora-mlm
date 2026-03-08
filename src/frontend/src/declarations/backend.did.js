@@ -9,6 +9,8 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const UserId = IDL.Nat;
+export const WithdrawalId = IDL.Nat;
+export const PaymentId = IDL.Nat;
 export const TxId = IDL.Nat;
 export const Transaction = IDL.Record({
   'status' : IDL.Text,
@@ -21,7 +23,7 @@ export const Transaction = IDL.Record({
   'txType' : IDL.Text,
   'amount' : IDL.Float64,
 });
-export const UserRole = IDL.Variant({ 'admin' : IDL.Null, 'user' : IDL.Null });
+export const UserType = IDL.Variant({ 'admin' : IDL.Null, 'user' : IDL.Null });
 export const Mobile = IDL.Text;
 export const User = IDL.Record({
   'principal' : IDL.Opt(IDL.Principal),
@@ -29,7 +31,7 @@ export const User = IDL.Record({
   'joinDate' : IDL.Int,
   'userId' : UserId,
   'name' : IDL.Text,
-  'role' : UserRole,
+  'role' : UserType,
   'sponsorId' : IDL.Opt(UserId),
   'rightChildId' : IDL.Opt(UserId),
   'leftChildId' : IDL.Opt(UserId),
@@ -37,7 +39,6 @@ export const User = IDL.Record({
   'mobile' : Mobile,
   'walletBalance' : IDL.Float64,
 });
-export const WithdrawalId = IDL.Nat;
 export const WithdrawalRequest = IDL.Record({
   'status' : IDL.Text,
   'ifscCode' : IDL.Text,
@@ -52,7 +53,6 @@ export const WithdrawalRequest = IDL.Record({
   'reqId' : WithdrawalId,
 });
 export const ProductId = IDL.Nat;
-export const PaymentId = IDL.Nat;
 export const PaymentRecord = IDL.Record({
   'status' : IDL.Text,
   'userId' : UserId,
@@ -63,7 +63,7 @@ export const PaymentRecord = IDL.Record({
   'upiTransactionRef' : IDL.Text,
   'amount' : IDL.Float64,
 });
-export const UserRole__1 = IDL.Variant({
+export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
@@ -88,13 +88,13 @@ export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'adminAddUser' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
-      [IDL.Nat],
+      [UserId],
       [],
     ),
-  'adminApproveWithdrawal' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'adminConfirmPayment' : IDL.Func([IDL.Nat], [], []),
+  'adminApproveWithdrawal' : IDL.Func([WithdrawalId, IDL.Text], [], []),
+  'adminConfirmPayment' : IDL.Func([PaymentId], [], []),
   'adminCreateProduct' : IDL.Func([IDL.Text, IDL.Text, IDL.Float64], [], []),
-  'adminCreditIncome' : IDL.Func([IDL.Nat, IDL.Float64, IDL.Text], [], []),
+  'adminCreditIncome' : IDL.Func([UserId, IDL.Float64, IDL.Text], [], []),
   'adminGetAllTransactions' : IDL.Func(
       [IDL.Nat, IDL.Nat],
       [IDL.Vec(Transaction)],
@@ -132,32 +132,28 @@ export const idlService = IDL.Service({
       [IDL.Vec(WithdrawalRequest)],
       ['query'],
     ),
-  'adminRejectPayment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-  'adminRejectWithdrawal' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+  'adminRejectPayment' : IDL.Func([PaymentId, IDL.Text], [], []),
+  'adminRejectWithdrawal' : IDL.Func([WithdrawalId, IDL.Text], [], []),
   'adminSetBinaryPosition' : IDL.Func(
-      [
-        IDL.Nat,
-        IDL.Nat,
-        IDL.Variant({ 'left' : IDL.Null, 'right' : IDL.Null }),
-      ],
+      [UserId, UserId, IDL.Variant({ 'left' : IDL.Null, 'right' : IDL.Null })],
       [],
       [],
     ),
-  'adminToggleProduct' : IDL.Func([IDL.Nat], [], []),
-  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole__1], [], []),
+  'adminToggleProduct' : IDL.Func([ProductId], [], []),
+  'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'generateOTP' : IDL.Func([IDL.Text], [IDL.Text], []),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
-  'getCallerUserRole' : IDL.Func([], [UserRole__1], ['query']),
-  'getProducts' : IDL.Func([], [IDL.Vec(Product)], ['query']),
+  'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getProducts' : IDL.Func([], [IDL.Vec(Product)], []),
   'getTransactions' : IDL.Func(
-      [IDL.Nat, IDL.Nat, IDL.Nat],
+      [UserId, IDL.Nat, IDL.Nat],
       [IDL.Vec(Transaction)],
       ['query'],
     ),
-  'getUserById' : IDL.Func([IDL.Nat], [User], ['query']),
+  'getUserById' : IDL.Func([UserId], [User], ['query']),
   'getUserByMobile' : IDL.Func([IDL.Text], [User], ['query']),
   'getUserByReferralCode' : IDL.Func([IDL.Text], [User], ['query']),
-  'getUserPayments' : IDL.Func([IDL.Nat], [IDL.Vec(PaymentRecord)], ['query']),
+  'getUserPayments' : IDL.Func([UserId], [IDL.Vec(PaymentRecord)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -174,28 +170,28 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getWithdrawalRequests' : IDL.Func(
-      [IDL.Nat],
+      [UserId],
       [IDL.Vec(WithdrawalRequest)],
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'loginUser' : IDL.Func([IDL.Text, IDL.Text], [User], []),
   'loginUserByMobile' : IDL.Func([IDL.Text], [User], []),
-  'purchaseProduct' : IDL.Func([IDL.Nat, IDL.Nat], [], []),
+  'purchaseProduct' : IDL.Func([UserId, ProductId], [], []),
   'registerUser' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [User],
       [],
     ),
   'requestWithdrawal' : IDL.Func(
-      [IDL.Nat, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [UserId, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [],
       [],
     ),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'submitPaymentRequest' : IDL.Func(
-      [IDL.Nat, IDL.Nat, IDL.Text],
-      [IDL.Nat],
+      [UserId, ProductId, IDL.Text],
+      [PaymentId],
       [],
     ),
   'verifyOTP' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
@@ -205,6 +201,8 @@ export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
   const UserId = IDL.Nat;
+  const WithdrawalId = IDL.Nat;
+  const PaymentId = IDL.Nat;
   const TxId = IDL.Nat;
   const Transaction = IDL.Record({
     'status' : IDL.Text,
@@ -217,7 +215,7 @@ export const idlFactory = ({ IDL }) => {
     'txType' : IDL.Text,
     'amount' : IDL.Float64,
   });
-  const UserRole = IDL.Variant({ 'admin' : IDL.Null, 'user' : IDL.Null });
+  const UserType = IDL.Variant({ 'admin' : IDL.Null, 'user' : IDL.Null });
   const Mobile = IDL.Text;
   const User = IDL.Record({
     'principal' : IDL.Opt(IDL.Principal),
@@ -225,7 +223,7 @@ export const idlFactory = ({ IDL }) => {
     'joinDate' : IDL.Int,
     'userId' : UserId,
     'name' : IDL.Text,
-    'role' : UserRole,
+    'role' : UserType,
     'sponsorId' : IDL.Opt(UserId),
     'rightChildId' : IDL.Opt(UserId),
     'leftChildId' : IDL.Opt(UserId),
@@ -233,7 +231,6 @@ export const idlFactory = ({ IDL }) => {
     'mobile' : Mobile,
     'walletBalance' : IDL.Float64,
   });
-  const WithdrawalId = IDL.Nat;
   const WithdrawalRequest = IDL.Record({
     'status' : IDL.Text,
     'ifscCode' : IDL.Text,
@@ -248,7 +245,6 @@ export const idlFactory = ({ IDL }) => {
     'reqId' : WithdrawalId,
   });
   const ProductId = IDL.Nat;
-  const PaymentId = IDL.Nat;
   const PaymentRecord = IDL.Record({
     'status' : IDL.Text,
     'userId' : UserId,
@@ -259,7 +255,7 @@ export const idlFactory = ({ IDL }) => {
     'upiTransactionRef' : IDL.Text,
     'amount' : IDL.Float64,
   });
-  const UserRole__1 = IDL.Variant({
+  const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
@@ -284,13 +280,13 @@ export const idlFactory = ({ IDL }) => {
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
     'adminAddUser' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
-        [IDL.Nat],
+        [UserId],
         [],
       ),
-    'adminApproveWithdrawal' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'adminConfirmPayment' : IDL.Func([IDL.Nat], [], []),
+    'adminApproveWithdrawal' : IDL.Func([WithdrawalId, IDL.Text], [], []),
+    'adminConfirmPayment' : IDL.Func([PaymentId], [], []),
     'adminCreateProduct' : IDL.Func([IDL.Text, IDL.Text, IDL.Float64], [], []),
-    'adminCreditIncome' : IDL.Func([IDL.Nat, IDL.Float64, IDL.Text], [], []),
+    'adminCreditIncome' : IDL.Func([UserId, IDL.Float64, IDL.Text], [], []),
     'adminGetAllTransactions' : IDL.Func(
         [IDL.Nat, IDL.Nat],
         [IDL.Vec(Transaction)],
@@ -336,36 +332,32 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(WithdrawalRequest)],
         ['query'],
       ),
-    'adminRejectPayment' : IDL.Func([IDL.Nat, IDL.Text], [], []),
-    'adminRejectWithdrawal' : IDL.Func([IDL.Nat, IDL.Text], [], []),
+    'adminRejectPayment' : IDL.Func([PaymentId, IDL.Text], [], []),
+    'adminRejectWithdrawal' : IDL.Func([WithdrawalId, IDL.Text], [], []),
     'adminSetBinaryPosition' : IDL.Func(
         [
-          IDL.Nat,
-          IDL.Nat,
+          UserId,
+          UserId,
           IDL.Variant({ 'left' : IDL.Null, 'right' : IDL.Null }),
         ],
         [],
         [],
       ),
-    'adminToggleProduct' : IDL.Func([IDL.Nat], [], []),
-    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole__1], [], []),
+    'adminToggleProduct' : IDL.Func([ProductId], [], []),
+    'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'generateOTP' : IDL.Func([IDL.Text], [IDL.Text], []),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
-    'getCallerUserRole' : IDL.Func([], [UserRole__1], ['query']),
-    'getProducts' : IDL.Func([], [IDL.Vec(Product)], ['query']),
+    'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getProducts' : IDL.Func([], [IDL.Vec(Product)], []),
     'getTransactions' : IDL.Func(
-        [IDL.Nat, IDL.Nat, IDL.Nat],
+        [UserId, IDL.Nat, IDL.Nat],
         [IDL.Vec(Transaction)],
         ['query'],
       ),
-    'getUserById' : IDL.Func([IDL.Nat], [User], ['query']),
+    'getUserById' : IDL.Func([UserId], [User], ['query']),
     'getUserByMobile' : IDL.Func([IDL.Text], [User], ['query']),
     'getUserByReferralCode' : IDL.Func([IDL.Text], [User], ['query']),
-    'getUserPayments' : IDL.Func(
-        [IDL.Nat],
-        [IDL.Vec(PaymentRecord)],
-        ['query'],
-      ),
+    'getUserPayments' : IDL.Func([UserId], [IDL.Vec(PaymentRecord)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -382,28 +374,28 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getWithdrawalRequests' : IDL.Func(
-        [IDL.Nat],
+        [UserId],
         [IDL.Vec(WithdrawalRequest)],
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'loginUser' : IDL.Func([IDL.Text, IDL.Text], [User], []),
     'loginUserByMobile' : IDL.Func([IDL.Text], [User], []),
-    'purchaseProduct' : IDL.Func([IDL.Nat, IDL.Nat], [], []),
+    'purchaseProduct' : IDL.Func([UserId, ProductId], [], []),
     'registerUser' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [User],
         [],
       ),
     'requestWithdrawal' : IDL.Func(
-        [IDL.Nat, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [UserId, IDL.Float64, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],
         [],
       ),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'submitPaymentRequest' : IDL.Func(
-        [IDL.Nat, IDL.Nat, IDL.Text],
-        [IDL.Nat],
+        [UserId, ProductId, IDL.Text],
+        [PaymentId],
         [],
       ),
     'verifyOTP' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),

@@ -14,7 +14,7 @@ export interface User {
     joinDate: bigint;
     userId: UserId;
     name: string;
-    role: UserRole;
+    role: UserType;
     sponsorId?: UserId;
     rightChildId?: UserId;
     leftChildId?: UserId;
@@ -78,23 +78,23 @@ export interface UserProfile {
 }
 export enum UserRole {
     admin = "admin",
-    user = "user"
-}
-export enum UserRole__1 {
-    admin = "admin",
     user = "user",
     guest = "guest"
+}
+export enum UserType {
+    admin = "admin",
+    user = "user"
 }
 export enum Variant_left_right {
     left = "left",
     right = "right"
 }
 export interface backendInterface {
-    adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<bigint>;
-    adminApproveWithdrawal(reqId: bigint, adminNote: string): Promise<void>;
-    adminConfirmPayment(paymentId: bigint): Promise<void>;
+    adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<UserId>;
+    adminApproveWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
+    adminConfirmPayment(paymentId: PaymentId): Promise<void>;
     adminCreateProduct(name: string, description: string, price: number): Promise<void>;
-    adminCreditIncome(userId: bigint, amount: number, note: string): Promise<void>;
+    adminCreditIncome(userId: UserId, amount: number, note: string): Promise<void>;
     adminGetAllTransactions(limit: bigint, offset: bigint): Promise<Array<Transaction>>;
     adminGetAllUsers(limit: bigint, offset: bigint): Promise<Array<User>>;
     adminGetAllWithdrawals(limit: bigint, offset: bigint): Promise<Array<WithdrawalRequest>>;
@@ -110,33 +110,33 @@ export interface backendInterface {
     adminGetPaymentHistory(limit: bigint, offset: bigint): Promise<Array<PaymentRecord>>;
     adminGetPendingPayments(): Promise<Array<PaymentRecord>>;
     adminGetPendingWithdrawals(): Promise<Array<WithdrawalRequest>>;
-    adminRejectPayment(paymentId: bigint, note: string): Promise<void>;
-    adminRejectWithdrawal(reqId: bigint, adminNote: string): Promise<void>;
-    adminSetBinaryPosition(parentUserId: bigint, childUserId: bigint, position: Variant_left_right): Promise<void>;
-    adminToggleProduct(productId: bigint): Promise<void>;
-    assignCallerUserRole(user: Principal, role: UserRole__1): Promise<void>;
+    adminRejectPayment(paymentId: PaymentId, note: string): Promise<void>;
+    adminRejectWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
+    adminSetBinaryPosition(parentUserId: UserId, childUserId: UserId, position: Variant_left_right): Promise<void>;
+    adminToggleProduct(productId: ProductId): Promise<void>;
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     generateOTP(mobile: string): Promise<string>;
     getCallerUserProfile(): Promise<UserProfile | null>;
-    getCallerUserRole(): Promise<UserRole__1>;
+    getCallerUserRole(): Promise<UserRole>;
     getProducts(): Promise<Array<Product>>;
-    getTransactions(userId: bigint, limit: bigint, offset: bigint): Promise<Array<Transaction>>;
-    getUserById(userId: bigint): Promise<User>;
+    getTransactions(userId: UserId, limit: bigint, offset: bigint): Promise<Array<Transaction>>;
+    getUserById(userId: UserId): Promise<User>;
     getUserByMobile(mobile: string): Promise<User>;
     getUserByReferralCode(code: string): Promise<User>;
-    getUserPayments(userId: bigint): Promise<Array<PaymentRecord>>;
+    getUserPayments(userId: UserId): Promise<Array<PaymentRecord>>;
     getUserProfile(userPrincipal: Principal): Promise<UserProfile | null>;
     getWallet(userId: bigint): Promise<{
         balance: number;
         transactions: Array<Transaction>;
     }>;
-    getWithdrawalRequests(userId: bigint): Promise<Array<WithdrawalRequest>>;
+    getWithdrawalRequests(userId: UserId): Promise<Array<WithdrawalRequest>>;
     isCallerAdmin(): Promise<boolean>;
     loginUser(mobile: string, otp: string): Promise<User>;
     loginUserByMobile(mobile: string): Promise<User>;
-    purchaseProduct(userId: bigint, productId: bigint): Promise<void>;
+    purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
     registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
-    requestWithdrawal(userId: bigint, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
+    requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    submitPaymentRequest(userId: bigint, productId: bigint, upiTransactionRef: string): Promise<bigint>;
+    submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
     verifyOTP(mobile: string, otp: string): Promise<boolean>;
 }

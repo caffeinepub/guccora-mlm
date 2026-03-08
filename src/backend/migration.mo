@@ -1,62 +1,57 @@
 import Map "mo:core/Map";
-import Principal "mo:core/Principal";
-import Float "mo:core/Float";
-import Text "mo:core/Text";
 import Nat "mo:core/Nat";
+import Float "mo:core/Float";
+import Principal "mo:core/Principal";
 import Int "mo:core/Int";
 
 module {
-  type UserId = Nat;
-  type ProductId = Nat;
-  type PaymentId = Nat;
-  type Mobile = Text;
-  type TxId = Nat;
-  type WithdrawalId = Nat;
-  type OTP = Text;
+  type OldUserId = Nat;
+  type OldProductId = Nat;
+  type OldPaymentId = Nat;
+  type OldTxId = Nat;
+  type OldWithdrawalId = Nat;
+  type OldMobile = Text;
 
-  type UserRole = {
-    #admin;
-    #user;
-  };
+  public type OldUserType = { #admin; #user };
 
-  type User = {
-    userId : UserId;
+  type OldUser = {
+    userId : OldUserId;
     name : Text;
-    mobile : Mobile;
+    mobile : OldMobile;
     referralCode : Text;
-    sponsorId : ?UserId;
-    leftChildId : ?UserId;
-    rightChildId : ?UserId;
+    sponsorId : ?OldUserId;
+    leftChildId : ?OldUserId;
+    rightChildId : ?OldUserId;
     isActive : Bool;
     joinDate : Int;
     walletBalance : Float;
-    role : UserRole;
+    role : OldUserType;
     principal : ?Principal;
   };
 
-  type Product = {
-    productId : ProductId;
+  type OldProduct = {
+    productId : OldProductId;
     name : Text;
     description : Text;
     price : Float;
     isActive : Bool;
   };
 
-  type Transaction = {
-    txId : TxId;
-    userId : UserId;
+  type OldTransaction = {
+    txId : OldTxId;
+    userId : OldUserId;
     txType : Text;
     amount : Float;
-    fromUserId : ?UserId;
+    fromUserId : ?OldUserId;
     level : ?Nat;
     timestamp : Int;
     status : Text;
     note : Text;
   };
 
-  type WithdrawalRequest = {
-    reqId : WithdrawalId;
-    userId : UserId;
+  type OldWithdrawalRequest = {
+    reqId : OldWithdrawalId;
+    userId : OldUserId;
     amount : Float;
     bankName : Text;
     accountNumber : Text;
@@ -68,26 +63,17 @@ module {
     adminNote : Text;
   };
 
-  type OTPRecord = {
-    mobile : Mobile;
-    otp : OTP;
+  type OldOTPRecord = {
+    mobile : OldMobile;
+    otp : Text;
     expiresAt : Int;
     isUsed : Bool;
   };
 
-  public type UserProfile = {
-    userId : UserId;
-    name : Text;
-    mobile : Mobile;
-    referralCode : Text;
-    isActive : Bool;
-    walletBalance : Float;
-  };
-
-  type PaymentRecord = {
-    paymentId : PaymentId;
-    userId : UserId;
-    productId : ProductId;
+  type OldPaymentRecord = {
+    paymentId : OldPaymentId;
+    userId : OldUserId;
+    productId : OldProductId;
     amount : Float;
     upiTransactionRef : Text;
     status : Text;
@@ -96,25 +82,23 @@ module {
   };
 
   type OldActor = {
-    payments : Map.Map<PaymentId, PaymentRecord>;
-    users : Map.Map<UserId, User>;
-    usersByMobile : Map.Map<Text, UserId>;
-    usersByReferralCode : Map.Map<Text, UserId>;
-    principalToUserId : Map.Map<Principal, UserId>;
-    products : Map.Map<ProductId, Product>;
-    transactions : Map.Map<TxId, Transaction>;
-    withdrawalRequests : Map.Map<WithdrawalId, WithdrawalRequest>;
-    otpRecords : Map.Map<Text, OTPRecord>;
-    nextUserId : Nat;
-    nextProductId : Nat;
-    nextTxId : Nat;
-    nextWithdrawalId : Nat;
-    nextPaymentId : Nat;
+    payments : Map.Map<OldPaymentId, OldPaymentRecord>;
+    users : Map.Map<OldUserId, OldUser>;
+    usersByMobile : Map.Map<Text, OldUserId>;
+    usersByReferralCode : Map.Map<Text, OldUserId>;
+    principalToUserId : Map.Map<Principal, OldUserId>;
+    products : Map.Map<OldProductId, OldProduct>;
+    transactions : Map.Map<OldTxId, OldTransaction>;
+    withdrawalRequests : Map.Map<OldWithdrawalId, OldWithdrawalRequest>;
+    otpRecords : Map.Map<OldMobile, OldOTPRecord>;
+    nextUserId : OldUserId;
+    nextProductId : OldProductId;
+    nextTxId : OldTxId;
+    nextWithdrawalId : OldWithdrawalId;
+    nextPaymentId : OldPaymentId;
   };
 
-  type NewActor = {};
-
-  public func run(_old : OldActor) : NewActor {
-    {};
+  public func run(old : OldActor) : OldActor {
+    old;
   };
 };

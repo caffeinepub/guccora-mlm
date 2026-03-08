@@ -1,21 +1,22 @@
 import Map "mo:core/Map";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
-import Float "mo:core/Float";
-import Principal "mo:core/Principal";
 import Int "mo:core/Int";
-import Time "mo:core/Time";
-import Array "mo:core/Array";
-import Iter "mo:core/Iter";
+import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
+import Iter "mo:core/Iter";
+import Array "mo:core/Array";
+import Float "mo:core/Float";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // Type definitions
   type UserId = Nat;
   type ProductId = Nat;
   type PaymentId = Nat;
@@ -24,7 +25,7 @@ actor {
   type WithdrawalId = Nat;
   type OTP = Text;
 
-  public type UserRole = { #admin; #user };
+  public type UserType = { #admin; #user };
 
   public type User = {
     userId : UserId;
@@ -37,7 +38,7 @@ actor {
     isActive : Bool;
     joinDate : Int;
     walletBalance : Float;
-    role : UserRole;
+    role : UserType;
     principal : ?Principal;
   };
 
@@ -76,7 +77,7 @@ actor {
   };
 
   public type OTPRecord = {
-    mobile : Mobile;
+    mobile : Text;
     otp : OTP;
     expiresAt : Int;
     isUsed : Bool;
@@ -102,7 +103,7 @@ actor {
     adminNote : Text;
   };
 
-  // State variables
+  let adminPrincipals = Map.empty<Principal, Bool>();
   let payments = Map.empty<PaymentId, PaymentRecord>();
   let users = Map.empty<UserId, User>();
   let usersByMobile = Map.empty<Text, UserId>();
@@ -113,19 +114,29 @@ actor {
   let withdrawalRequests = Map.empty<WithdrawalId, WithdrawalRequest>();
   let otpRecords = Map.empty<Mobile, OTPRecord>();
 
-  var nextUserId : Nat = 1;
-  var nextProductId : Nat = 1;
-  var nextTxId : Nat = 1;
-  var nextWithdrawalId : Nat = 1;
-  var nextPaymentId : Nat = 1;
+  var nextUserId : UserId = 1;
+  var nextProductId : ProductId = 1;
+  var nextTxId : TxId = 1;
+  var nextWithdrawalId : WithdrawalId = 1;
+  var nextPaymentId : PaymentId = 1;
 
-  // Helper functions
   func getUserIdByCaller(caller : Principal) : ?UserId {
     principalToUserId.get(caller);
   };
 
+  func isRegisteredUser(caller : Principal) : Bool {
+    switch (principalToUserId.get(caller)) {
+      case (?_) { true };
+      case null { false };
+    };
+  };
+
+  func isAdminCaller(caller : Principal) : Bool {
+    AccessControl.isAdmin(accessControlState, caller) or (adminPrincipals.get(caller) == ?true);
+  };
+
   func isOwnerOrAdmin(caller : Principal, userId : UserId) : Bool {
-    if (AccessControl.isAdmin(accessControlState, caller)) {
+    if (isAdminCaller(caller)) {
       return true;
     };
     switch (getUserIdByCaller(caller)) {
@@ -141,11 +152,9 @@ actor {
     };
   };
 
-  // Public API - No auth required
-
   public func generateOTP(mobile : Text) : async Text {
     let otp = "123456";
-    let expiresAt = Time.now() + 600_000_000_000; // 10 minutes
+    let expiresAt = Time.now() + 600_000_000_000;
     let record : OTPRecord = {
       mobile = mobile;
       otp = otp;
@@ -159,13 +168,7 @@ actor {
   public func verifyOTP(mobile : Text, otp : Text) : async Bool {
     switch (otpRecords.get(mobile)) {
       case (?record) {
-        if (record.isUsed) {
-          return false;
-        };
-        if (Time.now() > record.expiresAt) {
-          return false;
-        };
-        if (record.otp != otp) {
+        if (record.isUsed or Time.now() > record.expiresAt or record.otp != otp) {
           return false;
         };
         let updatedRecord : OTPRecord = {
@@ -188,7 +191,6 @@ actor {
     sponsorReferralCode : Text,
     otp : Text,
   ) : async User {
-    // Regenerate OTP record
     let expiresAt = Time.now() + 600_000_000_000;
     let freshRecord : OTPRecord = {
       mobile = mobile;
@@ -198,31 +200,26 @@ actor {
     };
     otpRecords.add(mobile, freshRecord);
 
-    // Verify OTP
     let valid = await verifyOTP(mobile, otp);
     if (not valid) {
       Runtime.trap("Invalid OTP");
     };
 
-    // Check if mobile already registered
     switch (usersByMobile.get(mobile)) {
       case (?_) { Runtime.trap("Mobile already registered") };
       case null {};
     };
 
-    // Check if referral code already taken
     switch (usersByReferralCode.get(referralCode)) {
       case (?_) { Runtime.trap("Referral code already taken") };
       case null {};
     };
 
-    // Find sponsor
     let sponsorId : ?UserId = switch (usersByReferralCode.get(sponsorReferralCode)) {
       case (?sid) { ?sid };
       case null { null };
     };
 
-    // Create user
     let userId = nextUserId;
     nextUserId += 1;
 
@@ -246,14 +243,10 @@ actor {
     usersByReferralCode.add(referralCode, userId);
     principalToUserId.add(caller, userId);
 
-    // Assign user role in access control
-    AccessControl.assignRole(accessControlState, caller, caller, #user);
-
     user;
   };
 
   public shared ({ caller }) func loginUser(mobile : Text, otp : Text) : async User {
-    // Find user by mobile
     let userId = switch (usersByMobile.get(mobile)) {
       case (?uid) { uid };
       case null { Runtime.trap("Mobile number not registered") };
@@ -264,7 +257,6 @@ actor {
       case null { Runtime.trap("User not found") };
     };
 
-    // Update principal link
     let updatedUser : User = {
       userId = user.userId;
       name = user.name;
@@ -283,17 +275,14 @@ actor {
     users.add(userId, updatedUser);
     principalToUserId.add(caller, userId);
 
-    // Assign role in access control
-    switch (user.role) {
-      case (#admin) { AccessControl.assignRole(accessControlState, caller, caller, #admin) };
-      case (#user) { AccessControl.assignRole(accessControlState, caller, caller, #user) };
+    if (user.role == #admin) {
+      adminPrincipals.add(caller, true);
     };
 
     updatedUser;
   };
 
   public shared ({ caller }) func loginUserByMobile(mobile : Text) : async User {
-    // Special admin auto-creation
     if (mobile == "9999999999") {
       switch (usersByMobile.get(mobile)) {
         case null {
@@ -317,7 +306,7 @@ actor {
           usersByMobile.add(mobile, userId);
           usersByReferralCode.add("ADMIN99999", userId);
           principalToUserId.add(caller, userId);
-          AccessControl.assignRole(accessControlState, caller, caller, #admin);
+          adminPrincipals.add(caller, true);
           return user;
         };
         case (?uid) {
@@ -341,7 +330,7 @@ actor {
           };
           users.add(uid, updatedUser);
           principalToUserId.add(caller, uid);
-          AccessControl.assignRole(accessControlState, caller, caller, #admin);
+          adminPrincipals.add(caller, true);
           return updatedUser;
         };
       };
@@ -354,7 +343,7 @@ actor {
           nextUserId += 1;
           let user : User = {
             userId = userId;
-            name = "Admin";
+            name = "Main Admin";
             mobile = mobile;
             referralCode = "ADMIN62887";
             sponsorId = null;
@@ -370,7 +359,7 @@ actor {
           usersByMobile.add(mobile, userId);
           usersByReferralCode.add("ADMIN62887", userId);
           principalToUserId.add(caller, userId);
-          AccessControl.assignRole(accessControlState, caller, caller, #admin);
+          adminPrincipals.add(caller, true);
           return user;
         };
         case (?uid) {
@@ -394,13 +383,12 @@ actor {
           };
           users.add(uid, updatedUser);
           principalToUserId.add(caller, uid);
-          AccessControl.assignRole(accessControlState, caller, caller, #admin);
+          adminPrincipals.add(caller, true);
           return updatedUser;
         };
       };
     };
 
-    // Regular user lookup
     let userId = switch (usersByMobile.get(mobile)) {
       case (?uid) { uid };
       case null { Runtime.trap("Mobile number not registered") };
@@ -429,23 +417,20 @@ actor {
     users.add(userId, updatedUser);
     principalToUserId.add(caller, userId);
 
-    switch (user.role) {
-      case (#admin) { AccessControl.assignRole(accessControlState, caller, caller, #admin) };
-      case (#user) { AccessControl.assignRole(accessControlState, caller, caller, #user) };
+    if (user.role == #admin) {
+      adminPrincipals.add(caller, true);
     };
 
     updatedUser;
   };
 
-  public query func getProducts() : async [Product] {
+  public func getProducts() : async [Product] {
     products.values().toArray();
   };
 
-  // User role required endpoints
-
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     switch (getUserIdByCaller(caller)) {
@@ -469,8 +454,8 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     switch (getUserIdByCaller(caller)) {
@@ -501,11 +486,11 @@ actor {
   };
 
   public query ({ caller }) func getUserProfile(userPrincipal : Principal) : async ?UserProfile {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
-    if (caller != userPrincipal and not AccessControl.isAdmin(accessControlState, caller)) {
+    if (caller != userPrincipal and not isAdminCaller(caller)) {
       Runtime.trap("Unauthorized: Can only view your own profile");
     };
 
@@ -529,15 +514,13 @@ actor {
     };
   };
 
-  public query ({ caller }) func getUserById(userId : Nat) : async User {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access user data");
+  public query ({ caller }) func getUserById(userId : UserId) : async User {
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
-
     if (not isOwnerOrAdmin(caller, userId)) {
       Runtime.trap("Unauthorized: Can only view your own data");
     };
-
     switch (users.get(userId)) {
       case (?user) { user };
       case null { Runtime.trap("User not found") };
@@ -545,8 +528,8 @@ actor {
   };
 
   public query ({ caller }) func getUserByMobile(mobile : Text) : async User {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access user data");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     let userId = switch (usersByMobile.get(mobile)) {
@@ -565,8 +548,8 @@ actor {
   };
 
   public query ({ caller }) func getUserByReferralCode(code : Text) : async User {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access user data");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     let userId = switch (usersByReferralCode.get(code)) {
@@ -585,8 +568,8 @@ actor {
   };
 
   public query ({ caller }) func getWallet(userId : Nat) : async { balance : Float; transactions : [Transaction] } {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access wallet data");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwnerOrAdmin(caller, userId)) {
@@ -606,15 +589,15 @@ actor {
   };
 
   public shared ({ caller }) func requestWithdrawal(
-    userId : Nat,
+    userId : UserId,
     amount : Float,
     bankName : Text,
     accountNumber : Text,
     ifscCode : Text,
     upiId : Text,
   ) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can request withdrawals");
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwner(caller, userId)) {
@@ -666,23 +649,23 @@ actor {
     users.add(userId, updatedUser);
   };
 
-  public query ({ caller }) func getWithdrawalRequests(userId : Nat) : async [WithdrawalRequest] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access withdrawal requests");
+  public query ({ caller }) func getWithdrawalRequests(userId : UserId) : async [WithdrawalRequest] {
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwnerOrAdmin(caller, userId)) {
       Runtime.trap("Unauthorized: Can only view your own withdrawal requests");
     };
 
-    withdrawalRequests.values().toArray().filter<WithdrawalRequest>(
+    withdrawalRequests.values().toArray().filter(
       func(req : WithdrawalRequest) : Bool { req.userId == userId },
     );
   };
 
-  public query ({ caller }) func getTransactions(userId : Nat, limit : Nat, offset : Nat) : async [Transaction] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access transactions");
+  public query ({ caller }) func getTransactions(userId : UserId, limit : Nat, offset : Nat) : async [Transaction] {
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwnerOrAdmin(caller, userId)) {
@@ -701,9 +684,9 @@ actor {
     Array.tabulate<Transaction>(end - start, func(i : Nat) : Transaction { userTxs[start + i] });
   };
 
-  public shared ({ caller }) func purchaseProduct(userId : Nat, productId : Nat) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can purchase products");
+  public shared ({ caller }) func purchaseProduct(userId : UserId, productId : ProductId) : async () {
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwner(caller, userId)) {
@@ -720,9 +703,9 @@ actor {
     };
   };
 
-  public shared ({ caller }) func submitPaymentRequest(userId : Nat, productId : Nat, upiTransactionRef : Text) : async Nat {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can submit payment requests");
+  public shared ({ caller }) func submitPaymentRequest(userId : UserId, productId : ProductId, upiTransactionRef : Text) : async PaymentId {
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwner(caller, userId)) {
@@ -752,25 +735,23 @@ actor {
     paymentId;
   };
 
-  public query ({ caller }) func getUserPayments(userId : Nat) : async [PaymentRecord] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: Only users can access payment records");
+  public query ({ caller }) func getUserPayments(userId : UserId) : async [PaymentRecord] {
+    if (not isRegisteredUser(caller)) {
+      Runtime.trap("Unauthorized: User not registered");
     };
 
     if (not isOwnerOrAdmin(caller, userId)) {
       Runtime.trap("Unauthorized: Can only view your own payments");
     };
 
-    payments.values().toArray().filter<PaymentRecord>(
+    payments.values().toArray().filter(
       func(p : PaymentRecord) : Bool { p.userId == userId },
     );
   };
 
-  // Admin role required endpoints
-
   public query ({ caller }) func adminGetAllUsers(limit : Nat, offset : Nat) : async [User] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access all users");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let allUsers = users.values().toArray();
@@ -783,8 +764,8 @@ actor {
   };
 
   public query ({ caller }) func adminGetAllTransactions(limit : Nat, offset : Nat) : async [Transaction] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access all transactions");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let allTxs = transactions.values().toArray();
@@ -797,8 +778,8 @@ actor {
   };
 
   public query ({ caller }) func adminGetAllWithdrawals(limit : Nat, offset : Nat) : async [WithdrawalRequest] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access all withdrawals");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let allReqs = withdrawalRequests.values().toArray();
@@ -811,8 +792,8 @@ actor {
   };
 
   public query ({ caller }) func adminGetPendingWithdrawals() : async [WithdrawalRequest] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access pending withdrawals");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     withdrawalRequests.values().toArray().filter<WithdrawalRequest>(
@@ -820,9 +801,9 @@ actor {
     );
   };
 
-  public shared ({ caller }) func adminApproveWithdrawal(reqId : Nat, adminNote : Text) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can approve withdrawals");
+  public shared ({ caller }) func adminApproveWithdrawal(reqId : WithdrawalId, adminNote : Text) : async () {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let request = switch (withdrawalRequests.get(reqId)) {
@@ -846,9 +827,9 @@ actor {
     withdrawalRequests.add(reqId, updatedRequest);
   };
 
-  public shared ({ caller }) func adminRejectWithdrawal(reqId : Nat, adminNote : Text) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can reject withdrawals");
+  public shared ({ caller }) func adminRejectWithdrawal(reqId : WithdrawalId, adminNote : Text) : async () {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let request = switch (withdrawalRequests.get(reqId)) {
@@ -893,9 +874,9 @@ actor {
     withdrawalRequests.add(reqId, updatedRequest);
   };
 
-  public shared ({ caller }) func adminCreditIncome(userId : Nat, amount : Float, note : Text) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can credit income");
+  public shared ({ caller }) func adminCreditIncome(userId : UserId, amount : Float, note : Text) : async () {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let user = switch (users.get(userId)) {
@@ -945,8 +926,8 @@ actor {
     totalPayments : Nat;
     pendingPaymentsCount : Nat;
   } {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access dashboard stats");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let allUsers = users.values().toArray();
@@ -987,8 +968,8 @@ actor {
   };
 
   public shared ({ caller }) func adminCreateProduct(name : Text, description : Text, price : Float) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can create products");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let productId = nextProductId;
@@ -1004,9 +985,9 @@ actor {
     products.add(productId, product);
   };
 
-  public shared ({ caller }) func adminToggleProduct(productId : Nat) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can toggle products");
+  public shared ({ caller }) func adminToggleProduct(productId : ProductId) : async () {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let product = switch (products.get(productId)) {
@@ -1029,9 +1010,9 @@ actor {
     mobile : Text,
     referralCode : Text,
     sponsorReferralCode : Text,
-  ) : async Nat {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can add users");
+  ) : async UserId {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     switch (usersByMobile.get(mobile)) {
@@ -1075,12 +1056,12 @@ actor {
   };
 
   public shared ({ caller }) func adminSetBinaryPosition(
-    parentUserId : Nat,
-    childUserId : Nat,
+    parentUserId : UserId,
+    childUserId : UserId,
     position : { #left; #right },
   ) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can set binary positions");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let parent = switch (users.get(parentUserId)) {
@@ -1093,65 +1074,28 @@ actor {
       case null { Runtime.trap("Child user not found") };
     };
 
-    let updatedParent : User = switch (position) {
+    let updatedParent = switch (position) {
       case (#left) {
-        {
-          userId = parent.userId;
-          name = parent.name;
-          mobile = parent.mobile;
-          referralCode = parent.referralCode;
-          sponsorId = parent.sponsorId;
-          leftChildId = ?childUserId;
-          rightChildId = parent.rightChildId;
-          isActive = parent.isActive;
-          joinDate = parent.joinDate;
-          walletBalance = parent.walletBalance;
-          role = parent.role;
-          principal = parent.principal;
-        };
+        { parent with leftChildId = ?childUserId };
       };
       case (#right) {
-        {
-          userId = parent.userId;
-          name = parent.name;
-          mobile = parent.mobile;
-          referralCode = parent.referralCode;
-          sponsorId = parent.sponsorId;
-          leftChildId = parent.leftChildId;
-          rightChildId = ?childUserId;
-          isActive = parent.isActive;
-          joinDate = parent.joinDate;
-          walletBalance = parent.walletBalance;
-          role = parent.role;
-          principal = parent.principal;
-        };
+        { parent with rightChildId = ?childUserId };
       };
     };
     users.add(parentUserId, updatedParent);
 
-    let updatedChild : User = {
-      userId = child.userId;
-      name = child.name;
-      mobile = child.mobile;
-      referralCode = child.referralCode;
-      sponsorId = switch (child.sponsorId) {
+    let updatedChild = {
+      child with sponsorId = switch (child.sponsorId) {
         case null { ?parentUserId };
         case (?sid) { ?sid };
       };
-      leftChildId = child.leftChildId;
-      rightChildId = child.rightChildId;
-      isActive = child.isActive;
-      joinDate = child.joinDate;
-      walletBalance = child.walletBalance;
-      role = child.role;
-      principal = child.principal;
     };
     users.add(childUserId, updatedChild);
   };
 
-  public shared ({ caller }) func adminConfirmPayment(paymentId : Nat) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can confirm payments");
+  public shared ({ caller }) func adminConfirmPayment(paymentId : PaymentId) : async () {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let payment = switch (payments.get(paymentId)) {
@@ -1176,20 +1120,7 @@ actor {
       case null { Runtime.trap("User not found") };
     };
 
-    let updatedUser : User = {
-      userId = user.userId;
-      name = user.name;
-      mobile = user.mobile;
-      referralCode = user.referralCode;
-      sponsorId = user.sponsorId;
-      leftChildId = user.leftChildId;
-      rightChildId = user.rightChildId;
-      isActive = true;
-      joinDate = user.joinDate;
-      walletBalance = user.walletBalance;
-      role = user.role;
-      principal = user.principal;
-    };
+    let updatedUser = { user with isActive = true };
     users.add(payment.userId, updatedUser);
 
     let txId = nextTxId;
@@ -1225,19 +1156,8 @@ actor {
             case null { Runtime.trap("Sponsor not found") };
           };
 
-          let updatedSponsor : User = {
-            userId = sponsor.userId;
-            name = sponsor.name;
-            mobile = sponsor.mobile;
-            referralCode = sponsor.referralCode;
-            sponsorId = sponsor.sponsorId;
-            leftChildId = sponsor.leftChildId;
-            rightChildId = sponsor.rightChildId;
-            isActive = sponsor.isActive;
-            joinDate = sponsor.joinDate;
-            walletBalance = sponsor.walletBalance + directIncome;
-            role = sponsor.role;
-            principal = sponsor.principal;
+          let updatedSponsor = {
+            sponsor with walletBalance = sponsor.walletBalance + directIncome;
           };
           users.add(sponsorId, updatedSponsor);
 
@@ -1261,9 +1181,9 @@ actor {
     };
   };
 
-  public shared ({ caller }) func adminRejectPayment(paymentId : Nat, note : Text) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can reject payments");
+  public shared ({ caller }) func adminRejectPayment(paymentId : PaymentId, note : Text) : async () {
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let payment = switch (payments.get(paymentId)) {
@@ -1285,8 +1205,8 @@ actor {
   };
 
   public query ({ caller }) func adminGetPaymentHistory(limit : Nat, offset : Nat) : async [PaymentRecord] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access payment history");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
     let allPayments = payments.values().toArray();
@@ -1299,13 +1219,12 @@ actor {
   };
 
   public query ({ caller }) func adminGetPendingPayments() : async [PaymentRecord] {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can access pending payments");
+    if (not isAdminCaller(caller)) {
+      Runtime.trap("Unauthorized: Admin access required");
     };
 
-    payments.values().toArray().filter<PaymentRecord>(
+    payments.values().toArray().filter(
       func(p : PaymentRecord) : Bool { p.status == "pending" },
     );
   };
 };
-
