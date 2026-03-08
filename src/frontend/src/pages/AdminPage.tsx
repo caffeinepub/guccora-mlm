@@ -66,11 +66,11 @@ import type {
   User,
   WithdrawalRequest,
 } from "../backend.d";
-import { UserRole__1, Variant_left_right } from "../backend.d";
+import { Variant_left_right } from "../backend.d";
 
 // ─── Admin Login Screen ────────────────────────────────────────────────────────
 
-const ADMIN_MOBILES = ["9999999999", "6305462887"];
+const ADMIN_MOBILES = ["6305462887", "9999999999"];
 
 function AdminLogin() {
   const { actor } = useActor();
@@ -185,20 +185,33 @@ function AdminLogin() {
           )}
         </Button>
 
-        {/* Demo hint */}
-        <div className="mt-4 p-3 rounded-xl bg-muted border border-border">
-          <p className="text-xs text-muted-foreground text-center leading-relaxed">
-            <span className="font-semibold text-foreground">
-              Admin accounts:
-            </span>{" "}
-            <code className="font-mono bg-background px-1 py-0.5 rounded text-foreground">
-              9999999999
-            </code>{" "}
-            or{" "}
-            <code className="font-mono bg-background px-1 py-0.5 rounded text-foreground">
-              6305462887
-            </code>
+        {/* Admin hint */}
+        <div className="mt-4 p-4 rounded-xl bg-muted border border-border space-y-2">
+          <p className="text-xs font-semibold text-foreground text-center mb-1">
+            Admin Accounts
           </p>
+          <div className="flex items-center justify-between gap-2 bg-background rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+              <code className="font-mono text-xs text-foreground">
+                6305462887
+              </code>
+            </div>
+            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full shrink-0">
+              Main Admin
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2 bg-background rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <code className="font-mono text-xs text-muted-foreground">
+                9999999999
+              </code>
+            </div>
+            <span className="text-[10px] font-semibold text-muted-foreground px-2 py-0.5 rounded-full shrink-0 border border-border">
+              Super Admin
+            </span>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -779,26 +792,8 @@ function AdminDashboard() {
     },
   });
 
-  const assignRoleMutation = useMutation({
-    mutationFn: async ({
-      principal,
-      role,
-    }: {
-      principal: NonNullable<User["principal"]>;
-      role: UserRole__1;
-    }) => {
-      if (!actor) throw new Error("Not connected");
-      await actor.assignCallerUserRole(principal, role);
-    },
-    onSuccess: (_, variables) => {
-      const isGrant = variables.role === UserRole__1.admin;
-      toast.success(isGrant ? "Admin access granted!" : "Admin access removed");
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-    },
-    onError: (err: unknown) => {
-      toast.error(err instanceof Error ? err.message : "Failed to update role");
-    },
-  });
+  // NOTE: assignCallerUserRole is not used — admin roles are managed at the
+  // system level. Mobile 6305462887 is the main admin (auto-seeded in backend).
 
   const confirmPaymentMutation = useMutation({
     mutationFn: async (paymentId: bigint) => {
@@ -2440,20 +2435,42 @@ function AdminDashboard() {
           <div className="space-y-5">
             <div>
               <h2 className="font-display text-lg font-bold text-foreground mb-1">
-                Admin Access Management
+                Admin Access
               </h2>
               <p className="text-xs text-muted-foreground">
-                Search for a user by mobile number to grant or remove admin
-                access.
+                View users and their admin status. Admin roles are managed at
+                the system level.
               </p>
             </div>
+
+            {/* System info banner */}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-xl p-4"
+            >
+              <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-foreground mb-0.5">
+                  Admin roles are managed at the system level
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Mobile{" "}
+                  <code className="font-mono bg-background px-1 py-0.5 rounded text-primary font-bold">
+                    6305462887
+                  </code>{" "}
+                  is the main admin and is auto-assigned in the backend. Admin
+                  access cannot be modified from this panel.
+                </p>
+              </div>
+            </motion.div>
 
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 data-ocid="admin.access.search_input"
-                placeholder="Search by mobile number..."
+                placeholder="Search by name or mobile number..."
                 value={accessSearch}
                 onChange={(e) => setAccessSearch(e.target.value)}
                 className="pl-10 h-11"
@@ -2461,33 +2478,37 @@ function AdminDashboard() {
               />
             </div>
 
-            {/* Results */}
+            {/* Results — read-only */}
             {(() => {
               const accessSearchTrimmed = accessSearch.trim();
-              if (!accessSearchTrimmed) {
+
+              const allUsers = users ?? [];
+              const accessResults = accessSearchTrimmed
+                ? allUsers.filter(
+                    (u) =>
+                      u.mobile.includes(accessSearchTrimmed) ||
+                      u.name
+                        .toLowerCase()
+                        .includes(accessSearchTrimmed.toLowerCase()),
+                  )
+                : allUsers.filter((u) => u.role === "admin");
+
+              if (!accessSearchTrimmed && accessResults.length === 0) {
                 return (
                   <div
                     data-ocid="admin.access.empty_state"
                     className="text-center py-12 text-muted-foreground"
                   >
                     <UserCog className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p className="font-semibold">Enter a mobile number</p>
+                    <p className="font-semibold">No admin users found</p>
                     <p className="text-sm mt-1">
-                      Search above to find a user and manage their admin access
+                      Search above to find a specific user
                     </p>
                   </div>
                 );
               }
 
-              const accessResults = (users ?? []).filter(
-                (u) =>
-                  u.mobile.includes(accessSearchTrimmed) ||
-                  u.name
-                    .toLowerCase()
-                    .includes(accessSearchTrimmed.toLowerCase()),
-              );
-
-              if (accessResults.length === 0) {
+              if (accessSearchTrimmed && accessResults.length === 0) {
                 return (
                   <div
                     data-ocid="admin.access.empty_state"
@@ -2496,7 +2517,7 @@ function AdminDashboard() {
                     <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
                     <p className="font-semibold">No users found</p>
                     <p className="text-sm mt-1">
-                      Try searching with a different mobile number or name
+                      Try a different mobile number or name
                     </p>
                   </div>
                 );
@@ -2504,9 +2525,14 @@ function AdminDashboard() {
 
               return (
                 <div className="space-y-3">
+                  {!accessSearchTrimmed && (
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Admin Users ({accessResults.length})
+                    </p>
+                  )}
                   {accessResults.slice(0, 10).map((user, i) => {
-                    const isAdmin = user.role === "admin";
-                    const hasPrincipal = !!user.principal;
+                    const isAdminUser = user.role === "admin";
+                    const isMainAdmin = user.mobile === "6305462887";
                     return (
                       <motion.div
                         key={String(user.userId)}
@@ -2514,18 +2540,17 @@ function AdminDashboard() {
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: Math.min(i * 0.04, 0.2) }}
-                        className="bg-card border border-border rounded-xl p-4"
+                        className={`bg-card border rounded-xl p-4 ${isAdminUser ? "border-primary/30" : "border-border"}`}
                       >
-                        {/* User info row */}
-                        <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-0.5">
                               <p className="font-bold text-foreground truncate">
                                 {user.name}
                               </p>
-                              {isAdmin ? (
+                              {isAdminUser ? (
                                 <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] py-0 shrink-0">
-                                  Admin
+                                  {isMainAdmin ? "Main Admin" : "Admin"}
                                 </Badge>
                               ) : (
                                 <Badge
@@ -2539,66 +2564,13 @@ function AdminDashboard() {
                             <p className="text-xs text-muted-foreground">
                               📱 +91 {user.mobile}
                             </p>
-                            {!hasPrincipal && (
-                              <p className="text-xs text-amber-600 mt-1 font-medium">
-                                ⚠️ User must log in at least once before admin
-                                access can be granted
-                              </p>
-                            )}
                           </div>
+                          {isAdminUser && (
+                            <ShieldCheck
+                              className={`w-5 h-5 shrink-0 ${isMainAdmin ? "text-primary" : "text-purple-500"}`}
+                            />
+                          )}
                         </div>
-
-                        {/* Action buttons */}
-                        {hasPrincipal && (
-                          <div className="flex gap-2">
-                            {!isAdmin ? (
-                              <Button
-                                data-ocid={`admin.access.confirm_button.${i + 1}`}
-                                size="sm"
-                                className="flex-1 gradient-primary border-0 text-white font-semibold rounded-lg h-9"
-                                onClick={() =>
-                                  assignRoleMutation.mutate({
-                                    principal: user.principal!,
-                                    role: UserRole__1.admin,
-                                  })
-                                }
-                                disabled={assignRoleMutation.isPending}
-                              >
-                                {assignRoleMutation.isPending ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
-                                    Grant Admin Access
-                                  </>
-                                )}
-                              </Button>
-                            ) : (
-                              <Button
-                                data-ocid={`admin.access.delete_button.${i + 1}`}
-                                size="sm"
-                                variant="destructive"
-                                className="flex-1 font-semibold rounded-lg h-9"
-                                onClick={() =>
-                                  assignRoleMutation.mutate({
-                                    principal: user.principal!,
-                                    role: UserRole__1.user,
-                                  })
-                                }
-                                disabled={assignRoleMutation.isPending}
-                              >
-                                {assignRoleMutation.isPending ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <XCircle className="w-3.5 h-3.5 mr-1.5" />
-                                    Remove Admin Access
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                        )}
                       </motion.div>
                     );
                   })}

@@ -1,26 +1,39 @@
 # Guccora MLM
 
 ## Current State
-The app has a full Motoko backend with users, products, payments, wallet, and binary MLM tree. The frontend uses mobile-only login (no OTP entry required). However, the backend `loginUser` function still requires OTP verification internally, which causes IC0508 errors when the canister restarts (in-memory OTP state is wiped). Admin `9999999999` exists only as a frontend hint but is not in the backend.
+Full MLM platform with:
+- User registration and login (mobile-only, no OTP)
+- Binary MLM tree (Left/Right)
+- Direct income (₹100/₹150/₹300 based on plan)
+- Binary pair income (₹200/₹300/₹600)
+- Level income (10 levels)
+- Wallet with transaction history
+- Withdrawal requests
+- Product store (3 plans: Starter ₹599, Growth ₹999, Premium ₹1999)
+- UPI payment system with admin approval
+- Admin panel at /admin with dashboard, users, products, payments, withdrawals, binary tree management
+
+**Current bug:** The `AccessControl.assignRole` function requires caller to already be admin before assigning any role. During login, callers aren't yet in the access control state, so `loginUserByMobile` always throws "Unauthorized: Only admins can assign user roles" when trying to set the user's role.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Auto-create admin user `9999999999` on backend startup (seeded on first login attempt)
-- `loginUserByMobile` function that does NOT require OTP -- just looks up user by mobile and links principal
+- `forceAssignRole` internal helper in access-control that bypasses the admin check -- for use during login and registration flows only
+- Mobile `6305462887` as the **primary/main admin** -- auto-created on first login with full admin role and all permissions
+- `adminSetUserAsAdmin` endpoint so admin can promote any user to admin by userId
 
 ### Modify
-- `loginUser` backend: make OTP verification optional/bypass -- accept any OTP or skip check entirely (since OTP is disabled in UI)
-- Frontend `LoginPage`, `RegisterPage`, `AdminPage` login flows: call the simplified login that never errors on OTP
-- Admin check: mobile `9999999999` should also be treated as admin in frontend fallback (alongside `6305462887`)
+- All `loginUserByMobile`, `loginUser`, and `registerUser` calls that use `AccessControl.assignRole(state, caller, caller, role)` must be changed to use `forceAssignRole(state, caller, role)` to eliminate the "Unauthorized: Only admins can assign user roles" error
+- `6305462887` should be the PRIMARY admin (listed first, with name "Main Admin")
+- `9999999999` remains as a secondary admin
 
 ### Remove
-- Hard OTP dependency in `loginUser` that causes IC0508/state-wipe failures
+- Nothing removed
 
 ## Implementation Plan
-1. Modify `loginUser` in `main.mo` to skip OTP verification (accept any OTP string, always succeeds if user exists) -- this makes login resilient to canister restarts
-2. Add a `loginUserByMobile` public function that takes only mobile, no OTP, returns User -- simplest path
-3. Auto-seed admin user `9999999999` with name "Admin" and role binding on first call to `loginUserByMobile` if not present
-4. Update frontend `LoginPage`, `RegisterPage`, `AdminPage` to call `loginUserByMobile` instead of `loginUser`
-5. Update `backend.d.ts` to add `loginUserByMobile` signature
-6. Update admin mobile list in frontend to include both `9999999999` and `6305462887`
+1. Add `forceAssignRole(state, user, role)` to access-control module -- bypasses admin check, for internal use only
+2. Replace all `AccessControl.assignRole(state, caller, caller, role)` in login/registration with `AccessControl.forceAssignRole(state, caller, role)`
+3. Ensure `6305462887` is auto-seeded as primary admin with name "Main Admin" and referral code "ADMIN6305462887"
+4. Ensure `9999999999` remains as secondary admin
+5. Add `adminSetUserAsAdmin(userId)` endpoint for runtime admin promotion
+6. Keep all existing admin endpoints: adminGetAllUsers, adminGetAllTransactions, adminGetAllWithdrawals, adminGetPendingWithdrawals, adminApproveWithdrawal, adminRejectWithdrawal, adminCreditIncome, adminGetDashboardStats, adminCreateProduct, adminToggleProduct, adminAddUser, adminSetBinaryPosition, adminConfirmPayment, adminRejectPayment, adminGetPaymentHistory, adminGetPendingPayments
