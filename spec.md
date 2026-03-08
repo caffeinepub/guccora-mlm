@@ -1,26 +1,26 @@
 # Guccora MLM
 
 ## Current State
-The admin panel at /admin has 8 tabs: Stats, Users, W/D (Withdrawals), Txns (Transactions), Tree (Binary), Products, Access, and Pays (Payments). All core functionality exists including add/edit/delete products, withdrawal approval, and payment confirmation. The "Pays" tab shows pending/all UPI payment records submitted by users.
+The app has a full Motoko backend with users, products, payments, wallet, and binary MLM tree. The frontend uses mobile-only login (no OTP entry required). However, the backend `loginUser` function still requires OTP verification internally, which causes IC0508 errors when the canister restarts (in-memory OTP state is wiped). Admin `9999999999` exists only as a frontend hint but is not in the backend.
 
 ## Requested Changes (Diff)
 
 ### Add
-- A dedicated "Purchases" tab in the admin panel showing product purchase history (calls `adminGetPaymentHistory`) with clear columns: user name, product name, amount, date, status
-- "View Product Purchases" section under Products tab that shows per-product purchase count and revenue summary
+- Auto-create admin user `9999999999` on backend startup (seeded on first login attempt)
+- `loginUserByMobile` function that does NOT require OTP -- just looks up user by mobile and links principal
 
 ### Modify
-- Rename the "Pays" tab to "Payments" with full label visible (not just icon) to clarify it covers payment approval
-- Improve the Payments tab header to clearly say "Payment Approval" with pending count badge more prominent
-- Make the Products tab show a "Purchases" summary section below the product list (total purchases per product from payment history)
-- Ensure withdrawal tab is clearly labeled "Withdrawals" and approve/reject buttons are prominent
+- `loginUser` backend: make OTP verification optional/bypass -- accept any OTP or skip check entirely (since OTP is disabled in UI)
+- Frontend `LoginPage`, `RegisterPage`, `AdminPage` login flows: call the simplified login that never errors on OTP
+- Admin check: mobile `9999999999` should also be treated as admin in frontend fallback (alongside `6305462887`)
 
 ### Remove
-- Nothing removed
+- Hard OTP dependency in `loginUser` that causes IC0508/state-wipe failures
 
 ## Implementation Plan
-1. In AdminPage.tsx tab list: rename "Pays" label to "Payments" (already partially there but hidden on small screens — make the label always visible)
-2. Add a "Purchases" tab between Products and Access tabs that shows all confirmed payment records as a purchase history table with user, product, amount, date columns
-3. Add a product purchases summary inside the Products tab — a collapsible section showing confirmed purchase count per product, pulled from allPayments filtered to `status === "confirmed"`
-4. Improve tab labels to show text on all screen sizes (remove `hidden sm:inline` restrictions for key tabs)
-5. Update withdrawal tab to show "Withdrawals" as full text and approve button to say "Approve" with green styling
+1. Modify `loginUser` in `main.mo` to skip OTP verification (accept any OTP string, always succeeds if user exists) -- this makes login resilient to canister restarts
+2. Add a `loginUserByMobile` public function that takes only mobile, no OTP, returns User -- simplest path
+3. Auto-seed admin user `9999999999` with name "Admin" and role binding on first call to `loginUserByMobile` if not present
+4. Update frontend `LoginPage`, `RegisterPage`, `AdminPage` to call `loginUserByMobile` instead of `loginUser`
+5. Update `backend.d.ts` to add `loginUserByMobile` signature
+6. Update admin mobile list in frontend to include both `9999999999` and `6305462887`

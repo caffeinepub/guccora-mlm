@@ -70,8 +70,7 @@ import { UserRole__1, Variant_left_right } from "../backend.d";
 
 // ─── Admin Login Screen ────────────────────────────────────────────────────────
 
-const DEMO_OTP = "123456";
-const ADMIN_MOBILE = "6305462887";
+const ADMIN_MOBILES = ["9999999999", "6305462887"];
 
 function AdminLogin() {
   const { actor } = useActor();
@@ -89,33 +88,15 @@ function AdminLogin() {
     try {
       const mobileNum = mobile.trim();
 
-      // Generate OTP silently then login with demo OTP (no OTP entry required)
-      try {
-        await actor.generateOTP(mobileNum);
-      } catch {
-        // ignore
-      }
+      const user = await actor.loginUserByMobile(mobileNum);
 
-      let user: import("../backend.d").User;
-      try {
-        user = await actor.loginUser(mobileNum, DEMO_OTP);
-      } catch {
-        // Retry once
-        try {
-          await actor.generateOTP(mobileNum);
-        } catch {
-          /* ignore */
-        }
-        user = await actor.loginUser(mobileNum, DEMO_OTP);
-      }
-
-      // Admin check: hardcoded number or role flag
-      let isAdmin = mobileNum === ADMIN_MOBILE;
+      // Admin check: hardcoded numbers, role flag, or backend check
+      let isAdmin = ADMIN_MOBILES.includes(mobileNum) || user.role === "admin";
       if (!isAdmin) {
         try {
           isAdmin = await actor.isCallerAdmin();
         } catch {
-          isAdmin = user.role === "admin";
+          // fallback already handled above
         }
       }
 

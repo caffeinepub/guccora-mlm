@@ -90,7 +90,6 @@ export class ExternalBlob {
     }
 }
 export type Mobile = string;
-export type OTP = string;
 export interface User {
     principal?: Principal;
     referralCode: string;
@@ -174,11 +173,11 @@ export enum Variant_left_right {
 }
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
-    adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<UserId>;
-    adminApproveWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
-    adminConfirmPayment(paymentId: PaymentId): Promise<void>;
+    adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<bigint>;
+    adminApproveWithdrawal(reqId: bigint, adminNote: string): Promise<void>;
+    adminConfirmPayment(paymentId: bigint): Promise<void>;
     adminCreateProduct(name: string, description: string, price: number): Promise<void>;
-    adminCreditIncome(userId: UserId, amount: number, note: string): Promise<void>;
+    adminCreditIncome(userId: bigint, amount: number, note: string): Promise<void>;
     adminGetAllTransactions(limit: bigint, offset: bigint): Promise<Array<Transaction>>;
     adminGetAllUsers(limit: bigint, offset: bigint): Promise<Array<User>>;
     adminGetAllWithdrawals(limit: bigint, offset: bigint): Promise<Array<WithdrawalRequest>>;
@@ -194,34 +193,35 @@ export interface backendInterface {
     adminGetPaymentHistory(limit: bigint, offset: bigint): Promise<Array<PaymentRecord>>;
     adminGetPendingPayments(): Promise<Array<PaymentRecord>>;
     adminGetPendingWithdrawals(): Promise<Array<WithdrawalRequest>>;
-    adminRejectPayment(paymentId: PaymentId, note: string): Promise<void>;
-    adminRejectWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
-    adminSetBinaryPosition(parentUserId: UserId, childUserId: UserId, position: Variant_left_right): Promise<void>;
-    adminToggleProduct(productId: ProductId): Promise<void>;
+    adminRejectPayment(paymentId: bigint, note: string): Promise<void>;
+    adminRejectWithdrawal(reqId: bigint, adminNote: string): Promise<void>;
+    adminSetBinaryPosition(parentUserId: bigint, childUserId: bigint, position: Variant_left_right): Promise<void>;
+    adminToggleProduct(productId: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole__1): Promise<void>;
-    generateOTP(mobile: string): Promise<OTP>;
+    generateOTP(mobile: string): Promise<string>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole__1>;
     getProducts(): Promise<Array<Product>>;
-    getTransactions(userId: UserId, limit: bigint, offset: bigint): Promise<Array<Transaction>>;
-    getUserById(userId: UserId): Promise<User>;
-    getUserByMobile(mobile: Mobile): Promise<User>;
+    getTransactions(userId: bigint, limit: bigint, offset: bigint): Promise<Array<Transaction>>;
+    getUserById(userId: bigint): Promise<User>;
+    getUserByMobile(mobile: string): Promise<User>;
     getUserByReferralCode(code: string): Promise<User>;
-    getUserPayments(userId: UserId): Promise<Array<PaymentRecord>>;
+    getUserPayments(userId: bigint): Promise<Array<PaymentRecord>>;
     getUserProfile(userPrincipal: Principal): Promise<UserProfile | null>;
-    getWallet(userId: UserId): Promise<{
+    getWallet(userId: bigint): Promise<{
         balance: number;
         transactions: Array<Transaction>;
     }>;
-    getWithdrawalRequests(userId: UserId): Promise<Array<WithdrawalRequest>>;
+    getWithdrawalRequests(userId: bigint): Promise<Array<WithdrawalRequest>>;
     isCallerAdmin(): Promise<boolean>;
-    loginUser(mobile: string, otp: OTP): Promise<User>;
-    purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
-    registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: OTP): Promise<User>;
-    requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
+    loginUser(mobile: string, otp: string): Promise<User>;
+    loginUserByMobile(mobile: string): Promise<User>;
+    purchaseProduct(userId: bigint, productId: bigint): Promise<void>;
+    registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
+    requestWithdrawal(userId: bigint, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
-    verifyOTP(mobile: string, otp: OTP): Promise<boolean>;
+    submitPaymentRequest(userId: bigint, productId: bigint, upiTransactionRef: string): Promise<bigint>;
+    verifyOTP(mobile: string, otp: string): Promise<boolean>;
 }
 import type { Mobile as _Mobile, Transaction as _Transaction, TxId as _TxId, User as _User, UserId as _UserId, UserProfile as _UserProfile, UserRole as _UserRole, UserRole__1 as _UserRole__1, WithdrawalId as _WithdrawalId, WithdrawalRequest as _WithdrawalRequest } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -240,7 +240,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminAddUser(arg0: string, arg1: string, arg2: string, arg3: string): Promise<UserId> {
+    async adminAddUser(arg0: string, arg1: string, arg2: string, arg3: string): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminAddUser(arg0, arg1, arg2, arg3);
@@ -254,7 +254,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminApproveWithdrawal(arg0: WithdrawalId, arg1: string): Promise<void> {
+    async adminApproveWithdrawal(arg0: bigint, arg1: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminApproveWithdrawal(arg0, arg1);
@@ -268,7 +268,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminConfirmPayment(arg0: PaymentId): Promise<void> {
+    async adminConfirmPayment(arg0: bigint): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminConfirmPayment(arg0);
@@ -296,7 +296,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminCreditIncome(arg0: UserId, arg1: number, arg2: string): Promise<void> {
+    async adminCreditIncome(arg0: bigint, arg1: number, arg2: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminCreditIncome(arg0, arg1, arg2);
@@ -416,7 +416,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n12(this._uploadFile, this._downloadFile, result);
         }
     }
-    async adminRejectPayment(arg0: PaymentId, arg1: string): Promise<void> {
+    async adminRejectPayment(arg0: bigint, arg1: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminRejectPayment(arg0, arg1);
@@ -430,7 +430,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminRejectWithdrawal(arg0: WithdrawalId, arg1: string): Promise<void> {
+    async adminRejectWithdrawal(arg0: bigint, arg1: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminRejectWithdrawal(arg0, arg1);
@@ -444,7 +444,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminSetBinaryPosition(arg0: UserId, arg1: UserId, arg2: Variant_left_right): Promise<void> {
+    async adminSetBinaryPosition(arg0: bigint, arg1: bigint, arg2: Variant_left_right): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminSetBinaryPosition(arg0, arg1, to_candid_variant_n16(this._uploadFile, this._downloadFile, arg2));
@@ -458,7 +458,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async adminToggleProduct(arg0: ProductId): Promise<void> {
+    async adminToggleProduct(arg0: bigint): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.adminToggleProduct(arg0);
@@ -486,7 +486,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async generateOTP(arg0: string): Promise<OTP> {
+    async generateOTP(arg0: string): Promise<string> {
         if (this.processError) {
             try {
                 const result = await this.actor.generateOTP(arg0);
@@ -542,7 +542,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async getTransactions(arg0: UserId, arg1: bigint, arg2: bigint): Promise<Array<Transaction>> {
+    async getTransactions(arg0: bigint, arg1: bigint, arg2: bigint): Promise<Array<Transaction>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getTransactions(arg0, arg1, arg2);
@@ -556,7 +556,7 @@ export class Backend implements backendInterface {
             return from_candid_vec_n1(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getUserById(arg0: UserId): Promise<User> {
+    async getUserById(arg0: bigint): Promise<User> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserById(arg0);
@@ -570,7 +570,7 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getUserByMobile(arg0: Mobile): Promise<User> {
+    async getUserByMobile(arg0: string): Promise<User> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserByMobile(arg0);
@@ -598,7 +598,7 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getUserPayments(arg0: UserId): Promise<Array<PaymentRecord>> {
+    async getUserPayments(arg0: bigint): Promise<Array<PaymentRecord>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getUserPayments(arg0);
@@ -626,7 +626,7 @@ export class Backend implements backendInterface {
             return from_candid_opt_n19(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getWallet(arg0: UserId): Promise<{
+    async getWallet(arg0: bigint): Promise<{
         balance: number;
         transactions: Array<Transaction>;
     }> {
@@ -643,7 +643,7 @@ export class Backend implements backendInterface {
             return from_candid_record_n22(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getWithdrawalRequests(arg0: UserId): Promise<Array<WithdrawalRequest>> {
+    async getWithdrawalRequests(arg0: bigint): Promise<Array<WithdrawalRequest>> {
         if (this.processError) {
             try {
                 const result = await this.actor.getWithdrawalRequests(arg0);
@@ -671,7 +671,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async loginUser(arg0: string, arg1: OTP): Promise<User> {
+    async loginUser(arg0: string, arg1: string): Promise<User> {
         if (this.processError) {
             try {
                 const result = await this.actor.loginUser(arg0, arg1);
@@ -685,7 +685,21 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async purchaseProduct(arg0: UserId, arg1: ProductId): Promise<void> {
+    async loginUserByMobile(arg0: string): Promise<User> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.loginUserByMobile(arg0);
+                return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.loginUserByMobile(arg0);
+            return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async purchaseProduct(arg0: bigint, arg1: bigint): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.purchaseProduct(arg0, arg1);
@@ -699,7 +713,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async registerUser(arg0: string, arg1: string, arg2: string, arg3: string, arg4: OTP): Promise<User> {
+    async registerUser(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<User> {
         if (this.processError) {
             try {
                 const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4);
@@ -713,7 +727,7 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
-    async requestWithdrawal(arg0: UserId, arg1: number, arg2: string, arg3: string, arg4: string, arg5: string): Promise<void> {
+    async requestWithdrawal(arg0: bigint, arg1: number, arg2: string, arg3: string, arg4: string, arg5: string): Promise<void> {
         if (this.processError) {
             try {
                 const result = await this.actor.requestWithdrawal(arg0, arg1, arg2, arg3, arg4, arg5);
@@ -741,7 +755,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async submitPaymentRequest(arg0: UserId, arg1: ProductId, arg2: string): Promise<PaymentId> {
+    async submitPaymentRequest(arg0: bigint, arg1: bigint, arg2: string): Promise<bigint> {
         if (this.processError) {
             try {
                 const result = await this.actor.submitPaymentRequest(arg0, arg1, arg2);
@@ -755,7 +769,7 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async verifyOTP(arg0: string, arg1: OTP): Promise<boolean> {
+    async verifyOTP(arg0: string, arg1: string): Promise<boolean> {
         if (this.processError) {
             try {
                 const result = await this.actor.verifyOTP(arg0, arg1);

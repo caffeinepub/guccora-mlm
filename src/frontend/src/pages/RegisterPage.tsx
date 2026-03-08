@@ -39,45 +39,22 @@ export default function RegisterPage() {
     try {
       const referralCode = `GUC${mobile.slice(-6)}`;
 
-      // Generate OTP first (this resets any existing OTP record to 123456)
+      // Generate OTP; fall back to demo OTP if generation fails
       let otpToUse = DEMO_OTP;
       try {
         const generated = await actor.generateOTP(mobile);
         otpToUse = generated || DEMO_OTP;
-      } catch (_) {
-        // Fall back to demo OTP if generation fails
+      } catch {
         otpToUse = DEMO_OTP;
       }
 
-      let user: import("../backend.d").User;
-      try {
-        user = await actor.registerUser(
-          name,
-          mobile,
-          referralCode,
-          sponsorCode,
-          otpToUse,
-        );
-      } catch (firstErr) {
-        // If registration fails and we used a different OTP, retry with demo
-        if (otpToUse !== DEMO_OTP) {
-          // Regenerate to reset the record
-          try {
-            await actor.generateOTP(mobile);
-          } catch {
-            // ignore
-          }
-          user = await actor.registerUser(
-            name,
-            mobile,
-            referralCode,
-            sponsorCode,
-            DEMO_OTP,
-          );
-        } else {
-          throw firstErr;
-        }
-      }
+      const user = await actor.registerUser(
+        name,
+        mobile,
+        referralCode,
+        sponsorCode,
+        otpToUse,
+      );
 
       setCurrentUser(user);
       toast.success("Account created! Welcome to Guccora.");

@@ -9,8 +9,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-const ADMIN_MOBILE = "6305462887";
-const DEMO_OTP = "123456";
+const ADMIN_MOBILES = ["9999999999", "6305462887"];
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -31,38 +30,21 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      // Generate OTP silently then login with demo OTP
-      try {
-        await actor.generateOTP(mobile);
-      } catch {
-        // ignore
-      }
-      let user: import("../backend.d").User;
-      try {
-        user = await actor.loginUser(mobile, DEMO_OTP);
-      } catch {
-        // Retry once
-        try {
-          await actor.generateOTP(mobile);
-        } catch {
-          /* ignore */
-        }
-        user = await actor.loginUser(mobile, DEMO_OTP);
-      }
+      const user = await actor.loginUserByMobile(mobile);
       setCurrentUser(user);
 
-      // Admin check: hardcoded number or role flag
-      let isAdmin = mobile === ADMIN_MOBILE;
+      // Admin check: hardcoded numbers, role flag, or backend check
+      let isAdmin = ADMIN_MOBILES.includes(mobile) || user.role === "admin";
       if (!isAdmin) {
         try {
           isAdmin = await actor.isCallerAdmin();
         } catch {
-          isAdmin = user.role === "admin";
+          // fallback already handled above
         }
       }
 
       toast.success(`Welcome back, ${user.name}!`);
-      if (isAdmin || user.role === "admin") {
+      if (isAdmin) {
         navigate({ to: "/admin" });
       } else {
         navigate({ to: "/dashboard" });
