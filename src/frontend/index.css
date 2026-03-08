@@ -1,0 +1,287 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Guccora brand fonts */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/assets/fonts/PlusJakartaSans[wght].woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/assets/fonts/CabinetGrotesk[wght].woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+
+    /* Guccora Premium Deep Violet Brand Theme */
+    --background: 0.97 0.005 280;
+    --foreground: 0.12 0.02 280;
+    --card: 1 0 0;
+    --card-foreground: 0.12 0.02 280;
+    --popover: 1 0 0;
+    --popover-foreground: 0.12 0.02 280;
+
+    /* Deep violet primary */
+    --primary: 0.32 0.18 290;
+    --primary-foreground: 0.98 0 0;
+
+    /* Secondary - slightly lighter violet */
+    --secondary: 0.92 0.04 290;
+    --secondary-foreground: 0.32 0.18 290;
+
+    /* Muted */
+    --muted: 0.94 0.02 280;
+    --muted-foreground: 0.5 0.04 280;
+
+    /* Accent - rich gold */
+    --accent: 0.78 0.15 75;
+    --accent-foreground: 0.12 0.02 280;
+
+    /* Destructive */
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 0.985 0 0;
+
+    /* Border & ring */
+    --border: 0.88 0.03 280;
+    --input: 0.88 0.03 280;
+    --ring: 0.45 0.15 290;
+
+    /* Income type chart colors */
+    --chart-1: 0.72 0.18 145; /* direct = emerald green */
+    --chart-2: 0.55 0.2 250;  /* binary = indigo blue */
+    --chart-3: 0.72 0.18 55;  /* level = amber orange */
+    --chart-4: 0.55 0.22 20;  /* withdrawal = red */
+    --chart-5: 0.78 0.15 75;  /* gold accent */
+
+    /* Sidebar */
+    --sidebar: 0.97 0.005 280;
+    --sidebar-foreground: 0.12 0.02 280;
+    --sidebar-primary: 0.32 0.18 290;
+    --sidebar-primary-foreground: 0.98 0 0;
+    --sidebar-accent: 0.92 0.04 290;
+    --sidebar-accent-foreground: 0.32 0.18 290;
+    --sidebar-border: 0.88 0.03 280;
+    --sidebar-ring: 0.45 0.15 290;
+
+    /* Custom brand tokens */
+    --brand-violet: 0.32 0.18 290;
+    --brand-violet-light: 0.55 0.18 290;
+    --brand-violet-dark: 0.2 0.2 290;
+    --brand-gold: 0.78 0.15 75;
+    --brand-gold-light: 0.88 0.12 75;
+    --income-direct: 0.72 0.18 145;
+    --income-binary: 0.55 0.2 250;
+    --income-level: 0.72 0.18 55;
+    --income-withdrawal: 0.55 0.22 20;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3 {
+    font-family: "Bricolage Grotesque", sans-serif;
+  }
+}
+
+/* Mobile app shell */
+.app-shell {
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  background: oklch(var(--background));
+  overflow-x: hidden;
+}
+
+/* Gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, oklch(var(--brand-violet-dark)), oklch(var(--brand-violet)));
+}
+
+.gradient-gold {
+  background: linear-gradient(135deg, oklch(var(--brand-gold)), oklch(var(--brand-gold-light)));
+}
+
+.gradient-direct {
+  background: linear-gradient(135deg, oklch(0.35 0.14 155), oklch(0.55 0.18 145));
+}
+
+.gradient-binary {
+  background: linear-gradient(135deg, oklch(0.3 0.18 265), oklch(0.5 0.2 250));
+}
+
+.gradient-level {
+  background: linear-gradient(135deg, oklch(0.45 0.16 45), oklch(0.65 0.18 55));
+}
+
+.gradient-wallet {
+  background: linear-gradient(135deg, oklch(var(--brand-violet-dark)), oklch(0.45 0.2 305));
+}
+
+/* Bottom navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  z-index: 50;
+  background: oklch(var(--card));
+  border-top: 1px solid oklch(var(--border));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -4px 20px oklch(var(--brand-violet) / 0.1);
+}
+
+/* Page wrapper for bottom nav */
+.page-content {
+  padding-bottom: 80px;
+}
+
+/* Card glass effect */
+.glass-card {
+  background: oklch(1 0 0 / 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(1 0 0 / 0.3);
+}
+
+/* Income type badges */
+.badge-direct {
+  background: oklch(0.95 0.05 145);
+  color: oklch(0.3 0.14 145);
+  border: 1px solid oklch(0.85 0.1 145);
+}
+
+.badge-binary {
+  background: oklch(0.93 0.05 250);
+  color: oklch(0.3 0.18 250);
+  border: 1px solid oklch(0.8 0.1 250);
+}
+
+.badge-level {
+  background: oklch(0.95 0.06 55);
+  color: oklch(0.35 0.16 45);
+  border: 1px solid oklch(0.85 0.12 55);
+}
+
+.badge-withdrawal {
+  background: oklch(0.95 0.05 20);
+  color: oklch(0.35 0.2 20);
+  border: 1px solid oklch(0.85 0.1 20);
+}
+
+.badge-joining {
+  background: oklch(0.93 0.05 290);
+  color: oklch(0.35 0.15 290);
+  border: 1px solid oklch(0.8 0.1 290);
+}
+
+/* Tree node styles */
+.tree-node {
+  background: oklch(var(--card));
+  border: 2px solid oklch(var(--border));
+  border-radius: 12px;
+  padding: 8px 12px;
+  text-align: center;
+  min-width: 90px;
+  position: relative;
+}
+
+.tree-node.active {
+  border-color: oklch(var(--brand-violet));
+  background: oklch(0.94 0.04 290);
+}
+
+.tree-node.empty {
+  border-style: dashed;
+  border-color: oklch(var(--muted-foreground));
+  background: oklch(var(--muted));
+}
+
+.tree-connector {
+  width: 2px;
+  height: 24px;
+  background: oklch(var(--border));
+  margin: 0 auto;
+}
+
+/* Animated gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, oklch(var(--brand-violet)), oklch(var(--brand-gold)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Touch-friendly tap size */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Page transition */
+.page-enter {
+  animation: pageEnter 0.25s ease-out;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Outer desktop wrapper */
+#root {
+  background: oklch(0.93 0.01 280);
+  min-height: 100dvh;
+}
+
+/* Splash background */
+.splash-bg {
+  background: linear-gradient(160deg,
+    oklch(0.18 0.22 295) 0%,
+    oklch(0.25 0.2 280) 40%,
+    oklch(0.22 0.18 305) 100%
+  );
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(var(--muted-foreground) / 0.3);
+  border-radius: 999px;
+}
