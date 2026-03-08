@@ -9,6 +9,8 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+const DEMO_OTP = "123456";
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { ref?: string };
@@ -35,16 +37,48 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      // Generate a referral code and a dummy OTP for bypass
       const referralCode = `GUC${mobile.slice(-6)}`;
-      const demoOtp = await actor.generateOTP(mobile);
-      const user = await actor.registerUser(
-        name,
-        mobile,
-        referralCode,
-        sponsorCode,
-        demoOtp,
-      );
+
+      // Generate OTP first (this resets any existing OTP record to 123456)
+      let otpToUse = DEMO_OTP;
+      try {
+        const generated = await actor.generateOTP(mobile);
+        otpToUse = generated || DEMO_OTP;
+      } catch (_) {
+        // Fall back to demo OTP if generation fails
+        otpToUse = DEMO_OTP;
+      }
+
+      let user: import("../backend.d").User;
+      try {
+        user = await actor.registerUser(
+          name,
+          mobile,
+          referralCode,
+          sponsorCode,
+          otpToUse,
+        );
+      } catch (firstErr) {
+        // If registration fails and we used a different OTP, retry with demo
+        if (otpToUse !== DEMO_OTP) {
+          // Regenerate to reset the record
+          try {
+            await actor.generateOTP(mobile);
+          } catch {
+            // ignore
+          }
+          user = await actor.registerUser(
+            name,
+            mobile,
+            referralCode,
+            sponsorCode,
+            DEMO_OTP,
+          );
+        } else {
+          throw firstErr;
+        }
+      }
+
       setCurrentUser(user);
       toast.success("Account created! Welcome to Guccora.");
       navigate({ to: "/dashboard" });

@@ -12,6 +12,17 @@ import type { Principal } from '@icp-sdk/core/principal';
 
 export type Mobile = string;
 export type OTP = string;
+export type PaymentId = bigint;
+export interface PaymentRecord {
+  'status' : string,
+  'userId' : UserId,
+  'productId' : ProductId,
+  'adminNote' : string,
+  'paymentId' : PaymentId,
+  'timestamp' : bigint,
+  'upiTransactionRef' : string,
+  'amount' : number,
+}
 export interface Product {
   'name' : string,
   'description' : string,
@@ -78,6 +89,7 @@ export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'adminAddUser' : ActorMethod<[string, string, string, string], UserId>,
   'adminApproveWithdrawal' : ActorMethod<[WithdrawalId, string], undefined>,
+  'adminConfirmPayment' : ActorMethod<[PaymentId], undefined>,
   'adminCreateProduct' : ActorMethod<[string, string, number], undefined>,
   'adminCreditIncome' : ActorMethod<[UserId, number, string], undefined>,
   'adminGetAllTransactions' : ActorMethod<[bigint, bigint], Array<Transaction>>,
@@ -91,12 +103,20 @@ export interface _SERVICE {
     {
       'activeUsers' : bigint,
       'totalIncomeDistributed' : number,
+      'totalPayments' : bigint,
       'pendingWithdrawalsCount' : bigint,
       'pendingWithdrawalsAmount' : number,
       'totalUsers' : bigint,
+      'pendingPaymentsCount' : bigint,
     }
   >,
+  'adminGetPaymentHistory' : ActorMethod<
+    [bigint, bigint],
+    Array<PaymentRecord>
+  >,
+  'adminGetPendingPayments' : ActorMethod<[], Array<PaymentRecord>>,
   'adminGetPendingWithdrawals' : ActorMethod<[], Array<WithdrawalRequest>>,
+  'adminRejectPayment' : ActorMethod<[PaymentId, string], undefined>,
   'adminRejectWithdrawal' : ActorMethod<[WithdrawalId, string], undefined>,
   'adminSetBinaryPosition' : ActorMethod<
     [UserId, UserId, { 'left' : null } | { 'right' : null }],
@@ -112,6 +132,7 @@ export interface _SERVICE {
   'getUserById' : ActorMethod<[UserId], User>,
   'getUserByMobile' : ActorMethod<[Mobile], User>,
   'getUserByReferralCode' : ActorMethod<[string], User>,
+  'getUserPayments' : ActorMethod<[UserId], Array<PaymentRecord>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getWallet' : ActorMethod<
     [UserId],
@@ -127,6 +148,7 @@ export interface _SERVICE {
     undefined
   >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'submitPaymentRequest' : ActorMethod<[UserId, ProductId, string], PaymentId>,
   'verifyOTP' : ActorMethod<[string, OTP], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;

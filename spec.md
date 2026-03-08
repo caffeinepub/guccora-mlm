@@ -1,32 +1,50 @@
 # Guccora MLM
 
 ## Current State
-Full MLM app with user registration, dashboard, binary tree, wallet, withdrawals, product store. Admin panel at `/admin` with 6 tabs: Stats, Users, Withdrawals, Transactions, Binary Tree, Products. Admin login uses mobile + any PIN. Login page redirects admin users to `/admin`.
+- Three product plans (Starter ₹599, Growth ₹999, Premium ₹1999) are displayed on the products page
+- Products page shows plan cards with a purchase button, but no payment flow
+- `purchaseProduct` backend call exists but doesn't activate the user account or record a payment
+- Admin panel has Stats, Users, Withdrawals, Transactions, Binary Tree, Products, and Access tabs
+- No dedicated payment history in admin panel
 
 ## Requested Changes (Diff)
 
 ### Add
-- Product edit functionality (edit name, description, price inline or via dialog)
-- Product delete functionality (delete button with confirm dialog)
-- More dashboard stats: total products, total withdrawal requests count, total transactions count
-- Admin login should work with just mobile number (9999999999), no PIN required — auto-login flow matching the app's simplified registration/login
-- After admin login on `/admin`, show admin dashboard immediately
+- UPI payment modal on the products page: show a QR code or UPI ID, an input for UTR/transaction reference number, and a "Confirm Payment" button
+- `PaymentRecord` type in backend: stores paymentId, userId, productId, amount, upiTransactionRef, status (pending/confirmed), timestamp, upiId
+- `submitPaymentRequest` backend function: creates a PaymentRecord with status "pending", to be reviewed by admin
+- `adminConfirmPayment` backend function: confirms a payment, activates the user account, and triggers direct income to sponsor
+- `adminGetPaymentHistory` backend function: returns all payment records (paginated)
+- `adminGetPendingPayments` backend function: returns pending payment records
+- "Payments" tab in admin panel showing all payment records with confirm/reject actions
+- Admin stats card for total payments and pending payments count
+- Payment history section on admin dashboard
 
 ### Modify
-- Admin login form: remove PIN field, just require mobile number, show "Login as Admin" button that directly logs in (generate OTP + login behind the scenes, same as simplified registration flow)
-- Products tab: add edit button (opens edit dialog) and delete button (with confirm alert dialog) per product
-- Stats tab: show 2 additional stat cards — Total Products count, Total Transactions count
-- Product cards: show edit and delete controls alongside the active toggle
+- `purchaseProduct`: instead of directly processing, now creates a payment request and shows UPI payment dialog
+- Products page: after clicking Purchase button, open a UPI payment dialog with company UPI ID, amount, and a field to enter UTR reference number
+- Admin Stats tab: add a "Payments" stat card
+- `adminGetDashboardStats`: include totalPayments and pendingPaymentsCount in response
 
 ### Remove
-- PIN field from admin login form
-- Demo hint showing PIN (update to show mobile 9999999999 only)
+- Nothing removed
 
 ## Implementation Plan
-1. Update `AdminLogin` component: remove PIN state/field, simplify to mobile-only login (generateOTP + loginUser in one click)
-2. Update demo hint in admin login to remove PIN reference
-3. Add `editProductDialog` state to `AdminDashboard` for editing products
-4. Add `adminUpdateProduct` or use `adminToggleProduct` + inline edit — check backend.d.ts for update API; if not present, implement UI-only edit that calls `adminCreateProduct` for new and uses toggle for active state
-5. Add `adminDeleteProduct` mutation — check if backend supports it; wire delete button with AlertDialog confirm
-6. Add 2 more stat cards in Stats tab using products.length and allTransactions.length 
-7. Apply deterministic `data-ocid` markers to all new interactive elements
+1. Update backend (main.mo):
+   - Add `PaymentRecord` type and `payments` map
+   - Add `nextPaymentId` counter
+   - Add `submitPaymentRequest(userId, productId, upiTransactionRef)` - creates pending payment, returns PaymentId
+   - Add `adminConfirmPayment(paymentId)` - confirms payment, activates user, distributes direct income to sponsor, records transaction
+   - Add `adminRejectPayment(paymentId, note)` - rejects payment, updates status
+   - Add `adminGetPaymentHistory(limit, offset)` - returns all payments sorted by timestamp desc
+   - Add `adminGetPendingPayments()` - returns pending payments
+   - Update `adminGetDashboardStats` to include totalPayments and pendingPaymentsCount
+2. Update frontend ProductsPage:
+   - Add UPI payment dialog component
+   - On "Purchase" click: open dialog with UPI ID (guccora@upi), amount, QR code placeholder, UTR input
+   - On confirm: call `submitPaymentRequest`, show success toast with "Payment submitted, awaiting admin confirmation"
+3. Update frontend AdminPage:
+   - Add "Payments" tab with pending/all filter
+   - Show payment records with user name, amount, UPI ref, status, timestamp
+   - Confirm and Reject buttons per pending payment
+   - Add payments stat card to Stats tab

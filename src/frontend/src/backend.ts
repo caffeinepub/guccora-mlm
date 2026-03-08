@@ -89,16 +89,8 @@ export class ExternalBlob {
         return this;
     }
 }
-export interface Product {
-    name: string;
-    description: string;
-    productId: ProductId;
-    isActive: boolean;
-    price: number;
-}
-export type UserId = bigint;
-export type OTP = string;
 export type Mobile = string;
+export type OTP = string;
 export interface User {
     principal?: Principal;
     referralCode: string;
@@ -114,6 +106,30 @@ export interface User {
     walletBalance: number;
 }
 export type TxId = bigint;
+export interface PaymentRecord {
+    status: string;
+    userId: UserId;
+    productId: ProductId;
+    adminNote: string;
+    paymentId: PaymentId;
+    timestamp: bigint;
+    upiTransactionRef: string;
+    amount: number;
+}
+export type WithdrawalId = bigint;
+export interface Transaction {
+    status: string;
+    userId: UserId;
+    note: string;
+    txId: TxId;
+    level?: bigint;
+    fromUserId?: UserId;
+    timestamp: bigint;
+    txType: string;
+    amount: number;
+}
+export type UserId = bigint;
+export type PaymentId = bigint;
 export type ProductId = bigint;
 export interface WithdrawalRequest {
     status: string;
@@ -128,7 +144,13 @@ export interface WithdrawalRequest {
     requestDate: bigint;
     reqId: WithdrawalId;
 }
-export type WithdrawalId = bigint;
+export interface Product {
+    name: string;
+    description: string;
+    productId: ProductId;
+    isActive: boolean;
+    price: number;
+}
 export interface UserProfile {
     referralCode: string;
     userId: UserId;
@@ -136,17 +158,6 @@ export interface UserProfile {
     isActive: boolean;
     mobile: Mobile;
     walletBalance: number;
-}
-export interface Transaction {
-    status: string;
-    userId: UserId;
-    note: string;
-    txId: TxId;
-    level?: bigint;
-    fromUserId?: UserId;
-    timestamp: bigint;
-    txType: string;
-    amount: number;
 }
 export enum UserRole {
     admin = "admin",
@@ -165,6 +176,7 @@ export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     adminAddUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string): Promise<UserId>;
     adminApproveWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
+    adminConfirmPayment(paymentId: PaymentId): Promise<void>;
     adminCreateProduct(name: string, description: string, price: number): Promise<void>;
     adminCreditIncome(userId: UserId, amount: number, note: string): Promise<void>;
     adminGetAllTransactions(limit: bigint, offset: bigint): Promise<Array<Transaction>>;
@@ -173,11 +185,16 @@ export interface backendInterface {
     adminGetDashboardStats(): Promise<{
         activeUsers: bigint;
         totalIncomeDistributed: number;
+        totalPayments: bigint;
         pendingWithdrawalsCount: bigint;
         pendingWithdrawalsAmount: number;
         totalUsers: bigint;
+        pendingPaymentsCount: bigint;
     }>;
+    adminGetPaymentHistory(limit: bigint, offset: bigint): Promise<Array<PaymentRecord>>;
+    adminGetPendingPayments(): Promise<Array<PaymentRecord>>;
     adminGetPendingWithdrawals(): Promise<Array<WithdrawalRequest>>;
+    adminRejectPayment(paymentId: PaymentId, note: string): Promise<void>;
     adminRejectWithdrawal(reqId: WithdrawalId, adminNote: string): Promise<void>;
     adminSetBinaryPosition(parentUserId: UserId, childUserId: UserId, position: Variant_left_right): Promise<void>;
     adminToggleProduct(productId: ProductId): Promise<void>;
@@ -190,6 +207,7 @@ export interface backendInterface {
     getUserById(userId: UserId): Promise<User>;
     getUserByMobile(mobile: Mobile): Promise<User>;
     getUserByReferralCode(code: string): Promise<User>;
+    getUserPayments(userId: UserId): Promise<Array<PaymentRecord>>;
     getUserProfile(userPrincipal: Principal): Promise<UserProfile | null>;
     getWallet(userId: UserId): Promise<{
         balance: number;
@@ -202,6 +220,7 @@ export interface backendInterface {
     registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: OTP): Promise<User>;
     requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
     verifyOTP(mobile: string, otp: OTP): Promise<boolean>;
 }
 import type { Mobile as _Mobile, Transaction as _Transaction, TxId as _TxId, User as _User, UserId as _UserId, UserProfile as _UserProfile, UserRole as _UserRole, UserRole__1 as _UserRole__1, WithdrawalId as _WithdrawalId, WithdrawalRequest as _WithdrawalRequest } from "./declarations/backend.did.d.ts";
@@ -246,6 +265,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.adminApproveWithdrawal(arg0, arg1);
+            return result;
+        }
+    }
+    async adminConfirmPayment(arg0: PaymentId): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminConfirmPayment(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminConfirmPayment(arg0);
             return result;
         }
     }
@@ -322,9 +355,11 @@ export class Backend implements backendInterface {
     async adminGetDashboardStats(): Promise<{
         activeUsers: bigint;
         totalIncomeDistributed: number;
+        totalPayments: bigint;
         pendingWithdrawalsCount: bigint;
         pendingWithdrawalsAmount: number;
         totalUsers: bigint;
+        pendingPaymentsCount: bigint;
     }> {
         if (this.processError) {
             try {
@@ -336,6 +371,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.adminGetDashboardStats();
+            return result;
+        }
+    }
+    async adminGetPaymentHistory(arg0: bigint, arg1: bigint): Promise<Array<PaymentRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGetPaymentHistory(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGetPaymentHistory(arg0, arg1);
+            return result;
+        }
+    }
+    async adminGetPendingPayments(): Promise<Array<PaymentRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminGetPendingPayments();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminGetPendingPayments();
             return result;
         }
     }
@@ -351,6 +414,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.adminGetPendingWithdrawals();
             return from_candid_vec_n12(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async adminRejectPayment(arg0: PaymentId, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.adminRejectPayment(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.adminRejectPayment(arg0, arg1);
+            return result;
         }
     }
     async adminRejectWithdrawal(arg0: WithdrawalId, arg1: string): Promise<void> {
@@ -521,6 +598,20 @@ export class Backend implements backendInterface {
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getUserPayments(arg0: UserId): Promise<Array<PaymentRecord>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getUserPayments(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getUserPayments(arg0);
+            return result;
+        }
+    }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
         if (this.processError) {
             try {
@@ -647,6 +738,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.saveCallerUserProfile(arg0);
+            return result;
+        }
+    }
+    async submitPaymentRequest(arg0: UserId, arg1: ProductId, arg2: string): Promise<PaymentId> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.submitPaymentRequest(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.submitPaymentRequest(arg0, arg1, arg2);
             return result;
         }
     }

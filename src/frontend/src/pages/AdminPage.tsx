@@ -34,9 +34,12 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Activity,
   ArrowDownToLine,
   CheckCircle2,
   ChevronDown,
+  Clock,
+  CreditCard,
   GitFork,
   Loader2,
   LogOut,
@@ -47,17 +50,27 @@ import {
   ShieldCheck,
   Trash2,
   TrendingUp,
+  UserCog,
   Users,
   Wallet,
+  WalletCards,
   XCircle,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { Product, User, WithdrawalRequest } from "../backend.d";
-import { Variant_left_right } from "../backend.d";
+import type {
+  PaymentRecord,
+  Product,
+  User,
+  WithdrawalRequest,
+} from "../backend.d";
+import { UserRole__1, Variant_left_right } from "../backend.d";
 
 // ─── Admin Login Screen ────────────────────────────────────────────────────────
+
+const DEMO_OTP = "123456";
+const ADMIN_MOBILE = "6305462887";
 
 function AdminLogin() {
   const { actor } = useActor();
@@ -73,9 +86,38 @@ function AdminLogin() {
     }
     setLoading(true);
     try {
-      const otp = await actor.generateOTP(mobile.trim());
-      const user = await actor.loginUser(mobile.trim(), otp);
-      const isAdmin = await actor.isCallerAdmin();
+      const mobileNum = mobile.trim();
+
+      // Generate OTP silently then login with demo OTP (no OTP entry required)
+      try {
+        await actor.generateOTP(mobileNum);
+      } catch {
+        // ignore
+      }
+
+      let user: import("../backend.d").User;
+      try {
+        user = await actor.loginUser(mobileNum, DEMO_OTP);
+      } catch {
+        // Retry once
+        try {
+          await actor.generateOTP(mobileNum);
+        } catch {
+          /* ignore */
+        }
+        user = await actor.loginUser(mobileNum, DEMO_OTP);
+      }
+
+      // Admin check: hardcoded number or role flag
+      let isAdmin = mobileNum === ADMIN_MOBILE;
+      if (!isAdmin) {
+        try {
+          isAdmin = await actor.isCallerAdmin();
+        } catch {
+          isAdmin = user.role === "admin";
+        }
+      }
+
       if (!isAdmin) {
         toast.error("Not an admin account");
         setLoading(false);
@@ -164,9 +206,15 @@ function AdminLogin() {
         {/* Demo hint */}
         <div className="mt-4 p-3 rounded-xl bg-muted border border-border">
           <p className="text-xs text-muted-foreground text-center leading-relaxed">
-            <span className="font-semibold text-foreground">Demo:</span> Mobile{" "}
+            <span className="font-semibold text-foreground">
+              Admin accounts:
+            </span>{" "}
             <code className="font-mono bg-background px-1 py-0.5 rounded text-foreground">
               9999999999
+            </code>{" "}
+            or{" "}
+            <code className="font-mono bg-background px-1 py-0.5 rounded text-foreground">
+              6305462887
             </code>
           </p>
         </div>
@@ -411,6 +459,21 @@ function AdminDashboard() {
     "left",
   );
 
+  // Admin Access tab
+  const [accessSearch, setAccessSearch] = useState("");
+
+  // Payments tab
+  const [paymentFilter, setPaymentFilter] = useState<"pending" | "all">(
+    "pending",
+  );
+
+  // Reject payment dialog
+  const [rejectPaymentDialog, setRejectPaymentDialog] = useState<{
+    open: boolean;
+    paymentId: bigint | null;
+  }>({ open: false, paymentId: null });
+  const [rejectPaymentNote, setRejectPaymentNote] = useState("");
+
   // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -466,6 +529,26 @@ function AdminDashboard() {
       return actor.getProducts();
     },
     enabled: !!actor && !isFetching,
+  });
+
+  const { data: pendingPayments, isLoading: pendingPaymentsLoading } = useQuery(
+    {
+      queryKey: ["admin-payments-pending"],
+      queryFn: async () => {
+        if (!actor) return [];
+        return actor.adminGetPendingPayments();
+      },
+      enabled: !!actor && !isFetching && paymentFilter === "pending",
+    },
+  );
+
+  const { data: allPayments, isLoading: allPaymentsLoading } = useQuery({
+    queryKey: ["admin-payments-all"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.adminGetPaymentHistory(BigInt(200), BigInt(0));
+    },
+    enabled: !!actor && !isFetching && paymentFilter === "all",
   });
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -642,6 +725,36 @@ function AdminDashboard() {
     },
   });
 
+  const seedProductsMutation = useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Not connected");
+      await actor.adminCreateProduct(
+        "Guccora Starter Plan",
+        "Starter product pack for MLM activation.",
+        599,
+      );
+      await actor.adminCreateProduct(
+        "Guccora Growth Plan",
+        "Medium product pack with higher earning potential.",
+        999,
+      );
+      await actor.adminCreateProduct(
+        "Guccora Premium Plan",
+        "Premium product pack with maximum earning benefits.",
+        1999,
+      );
+    },
+    onSuccess: () => {
+      toast.success("Default products created successfully! 🎉");
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to seed products",
+      );
+    },
+  });
+
   const setBinaryPositionMutation = useMutation({
     mutationFn: async () => {
       if (!actor || !parentUser || !childUser) {
@@ -671,6 +784,68 @@ function AdminDashboard() {
       toast.error(
         err instanceof Error ? err.message : "Failed to set position",
       );
+    },
+  });
+
+  const assignRoleMutation = useMutation({
+    mutationFn: async ({
+      principal,
+      role,
+    }: {
+      principal: NonNullable<User["principal"]>;
+      role: UserRole__1;
+    }) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.assignCallerUserRole(principal, role);
+    },
+    onSuccess: (_, variables) => {
+      const isGrant = variables.role === UserRole__1.admin;
+      toast.success(isGrant ? "Admin access granted!" : "Admin access removed");
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Failed to update role");
+    },
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (paymentId: bigint) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.adminConfirmPayment(paymentId);
+    },
+    onSuccess: () => {
+      toast.success("Payment confirmed! User account activated.");
+      queryClient.invalidateQueries({ queryKey: ["admin-payments-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-payments-all"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Confirmation failed");
+    },
+  });
+
+  const rejectPaymentMutation = useMutation({
+    mutationFn: async ({
+      paymentId,
+      note,
+    }: {
+      paymentId: bigint;
+      note: string;
+    }) => {
+      if (!actor) throw new Error("Not connected");
+      await actor.adminRejectPayment(paymentId, note);
+    },
+    onSuccess: () => {
+      toast.success("Payment rejected");
+      setRejectPaymentDialog({ open: false, paymentId: null });
+      setRejectPaymentNote("");
+      queryClient.invalidateQueries({ queryKey: ["admin-payments-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-payments-all"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Rejection failed");
     },
   });
 
@@ -720,13 +895,46 @@ function AdminDashboard() {
     }));
   };
 
+  // Build a userId → User lookup map for withdrawal cross-reference
+  const userMap = new Map<string, User>(
+    (users ?? []).map((u) => [String(u.userId), u]),
+  );
+
+  // Sorted products: active first
+  const sortedProducts = [...(products ?? [])].sort((a, b) => {
+    if (a.isActive === b.isActive) return 0;
+    return a.isActive ? -1 : 1;
+  });
+
+  // Pending withdrawal count for badge
+  const pendingWdCount = bigintToNum(
+    stats?.pendingWithdrawalsCount ?? BigInt(0),
+  );
+
+  // Pending payment count for badge
+  const pendingPayCount = bigintToNum(stats?.pendingPaymentsCount ?? BigInt(0));
+
+  // Total payments count
+  const totalPayCount = bigintToNum(stats?.totalPayments ?? BigInt(0));
+
+  // Displayed payments list
+  const payments: PaymentRecord[] =
+    paymentFilter === "pending" ? (pendingPayments ?? []) : (allPayments ?? []);
+  const paymentsLoading =
+    paymentFilter === "pending" ? pendingPaymentsLoading : allPaymentsLoading;
+
+  // Product lookup map
+  const productMap = new Map<string, Product>(
+    (products ?? []).map((p) => [String(p.productId), p]),
+  );
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="app-shell bg-background min-h-dvh">
       {/* Header */}
-      <div className="gradient-primary px-4 pt-14 pb-5">
-        <div className="flex items-center justify-between">
+      <div className="gradient-primary px-4 pt-14 pb-4">
+        <div className="flex items-center justify-between mb-3">
           <div>
             <h1 className="font-display text-2xl font-bold text-white tracking-tight">
               Admin Panel
@@ -746,12 +954,40 @@ function AdminDashboard() {
             Logout
           </Button>
         </div>
+        {/* Quick stat strip in header */}
+        <div className="flex gap-3 overflow-x-auto scrollbar-none pb-1">
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1.5 shrink-0">
+            <Users className="w-3 h-3 text-white/70" />
+            <span className="text-xs font-semibold text-white">
+              {statsLoading ? "…" : bigintToNum(stats?.totalUsers ?? BigInt(0))}{" "}
+              users
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1.5 shrink-0">
+            <ArrowDownToLine className="w-3 h-3 text-white/70" />
+            <span className="text-xs font-semibold text-white">
+              {statsLoading ? "…" : pendingWdCount} pending W/D
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1.5 shrink-0">
+            <Package className="w-3 h-3 text-white/70" />
+            <span className="text-xs font-semibold text-white">
+              {products?.length ?? "…"} products
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1.5 shrink-0">
+            <CreditCard className="w-3 h-3 text-white/70" />
+            <span className="text-xs font-semibold text-white">
+              {statsLoading ? "…" : pendingPayCount} pending pays
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="stats" className="w-full">
         {/* Scrollable tabs on mobile */}
-        <div className="border-b border-border bg-card">
+        <div className="border-b border-border bg-card sticky top-0 z-10">
           <div className="overflow-x-auto scrollbar-none">
             <TabsList className="inline-flex h-11 w-max min-w-full bg-transparent px-2 gap-0.5 rounded-none">
               <TabsTrigger
@@ -759,48 +995,74 @@ function AdminDashboard() {
                 data-ocid="admin.stats.tab"
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <TrendingUp className="w-3.5 h-3.5" />
-                Stats
+                <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Stats</span>
               </TabsTrigger>
               <TabsTrigger
                 value="users"
                 data-ocid="admin.users.tab"
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <Users className="w-3.5 h-3.5" />
-                Users
+                <Users className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Users</span>
               </TabsTrigger>
               <TabsTrigger
                 value="withdrawals"
                 data-ocid="admin.withdrawals.tab"
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <ArrowDownToLine className="w-3.5 h-3.5" />
-                W/D
+                <ArrowDownToLine className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">W/D</span>
+                {pendingWdCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 -ml-0.5">
+                    {pendingWdCount}
+                  </span>
+                )}
               </TabsTrigger>
               <TabsTrigger
                 value="transactions"
                 data-ocid="admin.transactions.tab"
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <Wallet className="w-3.5 h-3.5" />
-                Txns
+                <Wallet className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Txns</span>
               </TabsTrigger>
               <TabsTrigger
                 value="binary"
                 data-ocid="admin.binary.tab"
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <GitFork className="w-3.5 h-3.5" />
-                Tree
+                <GitFork className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Tree</span>
               </TabsTrigger>
               <TabsTrigger
                 value="products"
                 data-ocid="admin.products.tab"
                 className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
               >
-                <Package className="w-3.5 h-3.5" />
-                Products
+                <Package className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Products</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="access"
+                data-ocid="admin.access.tab"
+                className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <UserCog className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Access</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="payments"
+                data-ocid="admin.payments.tab"
+                className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold px-3 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Pays</span>
+                {pendingPayCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 -ml-0.5">
+                    {pendingPayCount}
+                  </span>
+                )}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -808,12 +1070,54 @@ function AdminDashboard() {
 
         {/* ── Tab 1: Stats ──────────────────────────────────────────────────── */}
         <TabsContent value="stats" className="px-4 pb-8 pt-4">
+          {/* Quick overview strip */}
+          {statsLoading ? (
+            <Skeleton
+              className="h-16 rounded-2xl mb-4"
+              data-ocid="admin.stats.loading_state"
+            />
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-3 bg-card border border-border rounded-2xl px-4 py-3 mb-4 overflow-x-auto scrollbar-none"
+            >
+              <div className="flex flex-col items-center shrink-0 min-w-[60px]">
+                <p className="font-display text-xl font-black text-primary">
+                  {bigintToNum(stats?.totalUsers ?? BigInt(0))}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 text-center">
+                  Total Users
+                </p>
+              </div>
+              <div className="w-px bg-border shrink-0" />
+              <div className="flex flex-col items-center shrink-0 min-w-[60px]">
+                <p className="font-display text-xl font-black text-destructive">
+                  {pendingWdCount}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 text-center">
+                  Pending W/D
+                </p>
+              </div>
+              <div className="w-px bg-border shrink-0" />
+              <div className="flex flex-col items-center shrink-0 min-w-[72px]">
+                <p className="font-display text-base font-black text-foreground leading-tight">
+                  {formatINR(stats?.totalIncomeDistributed ?? 0)}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 text-center">
+                  Distributed
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stat cards grid */}
           <div className="grid grid-cols-2 gap-3">
             {statsLoading ? (
               [1, 2, 3, 4].map((i) => (
                 <Skeleton
                   key={i}
-                  className="h-24 rounded-2xl"
+                  className="h-32 rounded-2xl"
                   data-ocid="admin.stats.loading_state"
                 />
               ))
@@ -822,39 +1126,39 @@ function AdminDashboard() {
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="gradient-primary rounded-2xl p-4 text-white"
+                  className="gradient-primary rounded-2xl p-5 text-white"
                 >
-                  <Users className="w-5 h-5 text-white/70 mb-2" />
-                  <p className="font-display text-2xl font-black">
+                  <Users className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-3xl font-black">
                     {bigintToNum(stats?.totalUsers ?? BigInt(0))}
                   </p>
-                  <p className="text-white/70 text-xs mt-0.5">Total Users</p>
+                  <p className="text-white/70 text-xs mt-1">Total Users</p>
                 </motion.div>
 
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.05 }}
-                  className="gradient-direct rounded-2xl p-4 text-white"
+                  className="gradient-direct rounded-2xl p-5 text-white"
                 >
-                  <CheckCircle2 className="w-5 h-5 text-white/70 mb-2" />
-                  <p className="font-display text-2xl font-black">
+                  <CheckCircle2 className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-3xl font-black">
                     {bigintToNum(stats?.activeUsers ?? BigInt(0))}
                   </p>
-                  <p className="text-white/70 text-xs mt-0.5">Active Users</p>
+                  <p className="text-white/70 text-xs mt-1">Active Users</p>
                 </motion.div>
 
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.1 }}
-                  className="gradient-binary rounded-2xl p-4 text-white"
+                  className="gradient-binary rounded-2xl p-5 text-white"
                 >
-                  <Wallet className="w-5 h-5 text-white/70 mb-2" />
-                  <p className="font-display text-xl font-black">
+                  <Wallet className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-2xl font-black leading-tight">
                     {formatINR(stats?.totalIncomeDistributed ?? 0)}
                   </p>
-                  <p className="text-white/70 text-xs mt-0.5">
+                  <p className="text-white/70 text-xs mt-1">
                     Income Distributed
                   </p>
                 </motion.div>
@@ -863,15 +1167,14 @@ function AdminDashboard() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.15 }}
-                  className="gradient-level rounded-2xl p-4 text-white"
+                  className="gradient-level rounded-2xl p-5 text-white"
                 >
-                  <ArrowDownToLine className="w-5 h-5 text-white/70 mb-2" />
-                  <p className="font-display text-xl font-black">
+                  <ArrowDownToLine className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-2xl font-black leading-tight">
                     {formatINR(stats?.pendingWithdrawalsAmount ?? 0)}
                   </p>
-                  <p className="text-white/70 text-xs mt-0.5">
-                    Pending W/D (
-                    {bigintToNum(stats?.pendingWithdrawalsCount ?? BigInt(0))})
+                  <p className="text-white/70 text-xs mt-1">
+                    Pending W/D ({pendingWdCount})
                   </p>
                 </motion.div>
 
@@ -879,32 +1182,80 @@ function AdminDashboard() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
-                  className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl p-4 text-white"
+                  className="bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl p-5 text-white"
                 >
-                  <Package className="w-5 h-5 text-white/70 mb-2" />
-                  <p className="font-display text-2xl font-black">
+                  <Package className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-3xl font-black">
                     {products?.length ?? 0}
                   </p>
-                  <p className="text-white/70 text-xs mt-0.5">Total Products</p>
+                  <p className="text-white/70 text-xs mt-1">Total Products</p>
                 </motion.div>
 
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.25 }}
-                  className="bg-gradient-to-br from-cyan-500 to-teal-500 rounded-2xl p-4 text-white"
+                  className="bg-gradient-to-br from-cyan-500 to-teal-500 rounded-2xl p-5 text-white"
                 >
-                  <Wallet className="w-5 h-5 text-white/70 mb-2" />
-                  <p className="font-display text-2xl font-black">
+                  <Wallet className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-3xl font-black">
                     {allTransactions?.length ?? 0}
                   </p>
-                  <p className="text-white/70 text-xs mt-0.5">
+                  <p className="text-white/70 text-xs mt-1">
                     Total Transactions
                   </p>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="bg-gradient-to-br from-teal-500 to-cyan-600 rounded-2xl p-5 text-white"
+                >
+                  <CreditCard className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-3xl font-black">
+                    {totalPayCount}
+                  </p>
+                  <p className="text-white/70 text-xs mt-1">Total Payments</p>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                  className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-5 text-white"
+                >
+                  <Clock className="w-5 h-5 text-white/70 mb-3" />
+                  <p className="font-display text-3xl font-black">
+                    {pendingPayCount}
+                  </p>
+                  <p className="text-white/70 text-xs mt-1">Pending Payments</p>
                 </motion.div>
               </>
             )}
           </div>
+
+          {/* System status note */}
+          {!statsLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="mt-4 flex items-center gap-2 bg-card border border-border rounded-xl px-4 py-3"
+            >
+              <Activity className="w-4 h-4 text-emerald-600 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">
+                  System online.
+                </span>{" "}
+                {bigintToNum(stats?.activeUsers ?? BigInt(0))} of{" "}
+                {bigintToNum(stats?.totalUsers ?? BigInt(0))} users are active.{" "}
+                {pendingWdCount > 0
+                  ? `${pendingWdCount} withdrawal${pendingWdCount !== 1 ? "s" : ""} awaiting review.`
+                  : "No pending withdrawals."}
+              </p>
+            </motion.div>
+          )}
         </TabsContent>
 
         {/* ── Tab 2: Users ──────────────────────────────────────────────────── */}
@@ -934,7 +1285,7 @@ function AdminDashboard() {
           {usersLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-24 rounded-xl" />
+                <Skeleton key={i} className="h-28 rounded-xl" />
               ))}
             </div>
           ) : filteredUsers.length === 0 ? (
@@ -959,65 +1310,87 @@ function AdminDashboard() {
                   transition={{ delay: Math.min(i * 0.03, 0.3) }}
                   className="bg-card border border-border rounded-xl p-4"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-foreground truncate">
-                          {user.name}
-                        </p>
-                        {user.isActive ? (
-                          <Badge className="badge-direct text-[10px] py-0">
-                            Active
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] py-0 text-muted-foreground"
-                          >
-                            Inactive
-                          </Badge>
-                        )}
-                        {user.role === "admin" && (
-                          <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] py-0">
-                            Admin
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        +91 {user.mobile}
+                  {/* Row 1: Name + status badges */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                      <p className="font-bold text-foreground truncate">
+                        {user.name}
                       </p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <p className="text-xs text-muted-foreground">
-                          Code:{" "}
-                          <span className="font-semibold text-foreground">
-                            {user.referralCode}
-                          </span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Bal:{" "}
-                          <span className="font-semibold text-primary">
-                            {formatINR(user.walletBalance)}
-                          </span>
-                        </p>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Joined: {formatDate(user.joinDate)}
-                      </p>
+                      {user.isActive ? (
+                        <Badge className="badge-direct text-[10px] py-0 shrink-0">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] py-0 text-muted-foreground shrink-0"
+                        >
+                          Inactive
+                        </Badge>
+                      )}
+                      {user.role === "admin" && (
+                        <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] py-0 shrink-0">
+                          Admin
+                        </Badge>
+                      )}
                     </div>
                     <Button
                       data-ocid={`admin.users.edit_button.${i + 1}`}
                       size="sm"
                       variant="outline"
-                      className="border-primary text-primary text-xs rounded-lg shrink-0"
+                      className="border-primary text-primary text-xs rounded-lg shrink-0 gap-1"
                       onClick={() => {
                         setCreditDialog({ open: true, user });
                         setCreditAmount("");
                         setCreditNote("");
                       }}
                     >
-                      Credit
+                      <WalletCards className="w-3 h-3" />
+                      Add Credit
                     </Button>
                   </div>
+
+                  {/* Row 2: Mobile + Referral code */}
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground mb-1.5">
+                    <span>📱 +91 {user.mobile}</span>
+                    <span>
+                      Code:{" "}
+                      <span className="font-semibold text-foreground font-mono">
+                        {user.referralCode}
+                      </span>
+                    </span>
+                  </div>
+
+                  {/* Row 3: Balance + Join date */}
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground mb-1.5">
+                    <span>
+                      Bal:{" "}
+                      <span className="font-bold text-primary">
+                        {formatINR(user.walletBalance)}
+                      </span>
+                    </span>
+                    <span>Joined: {formatDate(user.joinDate)}</span>
+                  </div>
+
+                  {/* Row 4: Binary leg chips if they exist */}
+                  {(user.leftChildId || user.rightChildId) && (
+                    <div className="flex items-center gap-2 mt-1">
+                      {user.leftChildId && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
+                          L:{" "}
+                          {userMap.get(String(user.leftChildId))?.name ??
+                            `#${String(user.leftChildId).slice(-4)}`}
+                        </span>
+                      )}
+                      {user.rightChildId && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">
+                          R:{" "}
+                          {userMap.get(String(user.rightChildId))?.name ??
+                            `#${String(user.rightChildId).slice(-4)}`}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </div>
@@ -1032,13 +1405,24 @@ function AdminDashboard() {
               type="button"
               data-ocid="admin.withdrawals.pending.tab"
               onClick={() => setWithdrawalFilter("pending")}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
                 withdrawalFilter === "pending"
                   ? "gradient-primary border-0 text-white"
                   : "bg-card border-border text-muted-foreground hover:text-foreground"
               }`}
             >
               Pending
+              {pendingWdCount > 0 && (
+                <span
+                  className={`inline-flex items-center justify-center min-w-[16px] h-4 rounded-full text-[10px] font-bold px-1 ${
+                    withdrawalFilter === "pending"
+                      ? "bg-white/25 text-white"
+                      : "bg-destructive text-destructive-foreground"
+                  }`}
+                >
+                  {pendingWdCount}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -1057,7 +1441,7 @@ function AdminDashboard() {
           {withdrawalsLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-32 rounded-xl" />
+                <Skeleton key={i} className="h-36 rounded-xl" />
               ))}
             </div>
           ) : withdrawals.length === 0 ? (
@@ -1079,79 +1463,93 @@ function AdminDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {withdrawals.map((wr: WithdrawalRequest, i) => (
-                <motion.div
-                  key={String(wr.reqId)}
-                  data-ocid={`admin.withdrawals.item.${i + 1}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i * 0.05, 0.3) }}
-                  className="bg-card border border-border rounded-xl p-4"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="flex-1">
-                      <p className="font-bold text-foreground">
+              {withdrawals.map((wr: WithdrawalRequest, i) => {
+                const requestingUser = userMap.get(String(wr.userId));
+                return (
+                  <motion.div
+                    key={String(wr.reqId)}
+                    data-ocid={`admin.withdrawals.item.${i + 1}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.05, 0.3) }}
+                    className="bg-card border border-border rounded-xl p-4"
+                  >
+                    {/* User identity row */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="font-bold text-foreground text-sm truncate">
+                            {requestingUser?.name ??
+                              `User …${String(wr.userId).slice(-6)}`}
+                          </p>
+                          <StatusBadge status={wr.status} />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {requestingUser
+                            ? `+91 ${requestingUser.mobile}`
+                            : `ID: …${String(wr.userId).slice(-6)}`}
+                        </p>
+                      </div>
+                      <p className="font-display text-lg font-black text-foreground shrink-0">
                         {formatINR(wr.amount)}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        User ID: …{String(wr.userId).slice(-6)}
-                      </p>
-                      {wr.bankName && (
-                        <p className="text-xs text-muted-foreground">
-                          {wr.bankName} • ****{wr.accountNumber.slice(-4)} •{" "}
-                          {wr.ifscCode}
-                        </p>
-                      )}
-                      {wr.upiId && (
-                        <p className="text-xs text-muted-foreground">
-                          UPI: {wr.upiId}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatDateTime(wr.requestDate)}
-                      </p>
                     </div>
-                    <StatusBadge status={wr.status} />
-                  </div>
 
-                  {wr.status === "pending" && (
-                    <div className="flex gap-2">
-                      <Button
-                        data-ocid={`admin.withdrawals.confirm_button.${i + 1}`}
-                        size="sm"
-                        className="flex-1 h-9 gradient-direct border-0 text-white text-xs rounded-lg"
-                        onClick={() =>
-                          approveWithdrawalMutation.mutate({
-                            reqId: wr.reqId,
-                            note: "Approved by admin",
-                          })
-                        }
-                        disabled={approveWithdrawalMutation.isPending}
-                      >
-                        {approveWithdrawalMutation.isPending ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 mr-1" /> Approve
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        data-ocid={`admin.withdrawals.delete_button.${i + 1}`}
-                        size="sm"
-                        variant="destructive"
-                        className="flex-1 h-9 text-xs rounded-lg"
-                        onClick={() => {
-                          setRejectDialog({ open: true, reqId: wr.reqId });
-                          setRejectNote("");
-                        }}
-                      >
-                        <XCircle className="w-3 h-3 mr-1" /> Reject
-                      </Button>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+                    {/* Bank / UPI details */}
+                    {wr.bankName && (
+                      <p className="text-xs text-muted-foreground mb-0.5">
+                        🏦 {wr.bankName} • ****{wr.accountNumber.slice(-4)} •{" "}
+                        {wr.ifscCode}
+                      </p>
+                    )}
+                    {wr.upiId && (
+                      <p className="text-xs text-muted-foreground mb-0.5">
+                        📲 UPI: {wr.upiId}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mb-3">
+                      🕐 {formatDateTime(wr.requestDate)}
+                    </p>
+
+                    {wr.status === "pending" && (
+                      <div className="flex gap-2">
+                        <Button
+                          data-ocid={`admin.withdrawals.confirm_button.${i + 1}`}
+                          className="flex-1 h-10 gradient-direct border-0 text-white font-semibold rounded-lg"
+                          onClick={() =>
+                            approveWithdrawalMutation.mutate({
+                              reqId: wr.reqId,
+                              note: "Approved by admin",
+                            })
+                          }
+                          disabled={approveWithdrawalMutation.isPending}
+                        >
+                          {approveWithdrawalMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                              Approve
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          data-ocid={`admin.withdrawals.delete_button.${i + 1}`}
+                          variant="destructive"
+                          className="flex-1 h-10 font-semibold rounded-lg"
+                          onClick={() => {
+                            setRejectDialog({ open: true, reqId: wr.reqId });
+                            setRejectNote("");
+                          }}
+                        >
+                          <XCircle className="w-4 h-4 mr-1.5" />
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -1202,6 +1600,7 @@ function AdminDashboard() {
             <div className="space-y-2">
               {filteredTxs.map((tx, i) => {
                 const isDebit = tx.txType === "withdrawal";
+                const txUser = userMap.get(String(tx.userId));
                 return (
                   <motion.div
                     key={String(tx.txId)}
@@ -1215,12 +1614,17 @@ function AdminDashboard() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <TxTypeBadge txType={tx.txType} />
                         <p className="text-xs text-muted-foreground truncate">
-                          {tx.note || `User …${String(tx.userId).slice(-4)}`}
+                          {tx.note ||
+                            (txUser
+                              ? txUser.name
+                              : `User …${String(tx.userId).slice(-4)}`)}
                         </p>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {formatDateTime(tx.timestamp)} • User …
-                        {String(tx.userId).slice(-4)}
+                        {formatDateTime(tx.timestamp)} •{" "}
+                        {txUser
+                          ? txUser.mobile
+                          : `…${String(tx.userId).slice(-4)}`}
                       </p>
                     </div>
                     <p
@@ -1321,7 +1725,7 @@ function AdminDashboard() {
               </Button>
             </div>
 
-            {/* Parent info preview */}
+            {/* Parent info preview with named children */}
             <AnimatePresence>
               {parentUser && (
                 <motion.div
@@ -1330,43 +1734,78 @@ function AdminDashboard() {
                   exit={{ opacity: 0, y: 8 }}
                   className="bg-secondary/50 border border-border rounded-2xl p-4"
                 >
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Parent Details
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Tree Preview
                   </p>
-                  <p className="font-semibold text-foreground">
-                    {parentUser.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {parentUser.mobile}
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    <div className="bg-card rounded-xl p-3 border border-border">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                        Left Leg
+
+                  {/* Parent node */}
+                  <div className="flex flex-col items-center mb-2">
+                    <div className="tree-node active w-36 text-center">
+                      <p className="text-xs font-bold text-foreground truncate">
+                        {parentUser.name}
                       </p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {parentUser.leftChildId ? (
-                          `User #${String(parentUser.leftChildId).slice(-4)}`
-                        ) : (
-                          <span className="text-muted-foreground text-xs">
-                            Empty
-                          </span>
-                        )}
+                      <p className="text-[10px] text-muted-foreground">
+                        {parentUser.mobile}
                       </p>
                     </div>
-                    <div className="bg-card rounded-xl p-3 border border-border">
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                        Right Leg
+                  </div>
+
+                  {/* Connector */}
+                  <div className="flex justify-center mb-1">
+                    <div className="tree-connector" />
+                  </div>
+
+                  {/* Children row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Left child */}
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Left
                       </p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {parentUser.rightChildId ? (
-                          `User #${String(parentUser.rightChildId).slice(-4)}`
-                        ) : (
-                          <span className="text-muted-foreground text-xs">
+                      {parentUser.leftChildId ? (
+                        <div className="tree-node active w-full text-center">
+                          <p className="text-xs font-bold text-foreground truncate">
+                            {userMap.get(String(parentUser.leftChildId))
+                              ?.name ??
+                              `User #${String(parentUser.leftChildId).slice(-4)}`}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {userMap.get(String(parentUser.leftChildId))
+                              ?.mobile ?? ""}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="tree-node empty w-full text-center">
+                          <p className="text-[10px] text-muted-foreground">
                             Empty
-                          </span>
-                        )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {/* Right child */}
+                    <div className="flex flex-col items-center gap-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Right
                       </p>
+                      {parentUser.rightChildId ? (
+                        <div className="tree-node active w-full text-center">
+                          <p className="text-xs font-bold text-foreground truncate">
+                            {userMap.get(String(parentUser.rightChildId))
+                              ?.name ??
+                              `User #${String(parentUser.rightChildId).slice(-4)}`}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {userMap.get(String(parentUser.rightChildId))
+                              ?.mobile ?? ""}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="tree-node empty w-full text-center">
+                          <p className="text-[10px] text-muted-foreground">
+                            Empty
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -1377,14 +1816,59 @@ function AdminDashboard() {
 
         {/* ── Tab 6: Products ───────────────────────────────────────────────── */}
         <TabsContent value="products" className="px-4 pb-8 pt-4">
-          <Button
-            data-ocid="admin.products.open_modal_button"
-            onClick={() => setShowAddProduct(!showAddProduct)}
-            className="w-full h-12 gradient-primary border-0 text-white font-bold rounded-xl mb-4"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add New Product
-          </Button>
+          <div className="flex gap-2 mb-4">
+            <Button
+              data-ocid="admin.products.open_modal_button"
+              onClick={() => setShowAddProduct(!showAddProduct)}
+              className="flex-1 h-12 gradient-primary border-0 text-white font-bold rounded-xl"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Product
+            </Button>
+          </div>
+
+          {/* Setup Default Products button — shown when no active products exist */}
+          {!productsLoading &&
+            (!sortedProducts ||
+              sortedProducts.length === 0 ||
+              sortedProducts.every((p) => !p.isActive)) && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl"
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <Package className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-blue-900">
+                      No products found
+                    </p>
+                    <p className="text-xs text-blue-700 mt-0.5">
+                      Quickly seed the 3 default Guccora plans (₹599, ₹999,
+                      ₹1999) with one click.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  data-ocid="admin.products.seed_button"
+                  onClick={() => seedProductsMutation.mutate()}
+                  disabled={seedProductsMutation.isPending}
+                  className="w-full h-11 bg-blue-600 hover:bg-blue-700 border-0 text-white font-bold rounded-xl"
+                >
+                  {seedProductsMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating products...
+                    </>
+                  ) : (
+                    <>
+                      <Package className="w-4 h-4 mr-2" />
+                      Setup Default Products
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            )}
 
           {/* Inline add product form */}
           <AnimatePresence>
@@ -1460,10 +1944,10 @@ function AdminDashboard() {
           {productsLoading ? (
             <div className="space-y-3">
               {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-20 rounded-xl" />
+                <Skeleton key={i} className="h-24 rounded-xl" />
               ))}
             </div>
-          ) : !products || products.length === 0 ? (
+          ) : !sortedProducts || sortedProducts.length === 0 ? (
             <div
               data-ocid="admin.products.empty_state"
               className="text-center py-12 text-muted-foreground"
@@ -1474,70 +1958,451 @@ function AdminDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {products.map((product, i) => (
+              {sortedProducts.map((product, i) => (
                 <motion.div
                   key={String(product.productId)}
                   data-ocid={`admin.products.item.${i + 1}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i * 0.05, 0.3) }}
-                  className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-3"
+                  className={`bg-card border rounded-xl p-4 ${
+                    product.isActive
+                      ? "border-primary/30"
+                      : "border-border opacity-70"
+                  }`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground truncate">
-                      {product.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {product.description}
-                    </p>
-                    <p className="text-sm font-bold text-primary mt-1">
-                      {formatINR(product.price)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span
-                      className={`text-xs font-semibold ${product.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
-                    >
-                      {product.isActive ? "Active" : "Off"}
-                    </span>
-                    <Switch
-                      data-ocid={`admin.products.switch.${i + 1}`}
-                      checked={product.isActive}
-                      onCheckedChange={() =>
-                        toggleProductMutation.mutate(product.productId)
-                      }
-                      disabled={toggleProductMutation.isPending}
-                    />
-                    <Button
-                      data-ocid={`admin.products.edit_button.${i + 1}`}
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10"
-                      onClick={() => {
-                        setEditProductDialog({ open: true, product });
-                        setEditName(product.name);
-                        setEditDescription(product.description);
-                        setEditPrice(String(product.price));
-                      }}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      data-ocid={`admin.products.delete_button.${i + 1}`}
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() =>
-                        setDeleteProductDialog({ open: true, product })
-                      }
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-semibold text-foreground truncate">
+                          {product.name}
+                        </p>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                            product.isActive
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {product.isActive ? "Active" : "Off"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                        {product.description}
+                      </p>
+                      <p className="text-sm font-bold text-primary mt-2">
+                        {formatINR(product.price)}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-center gap-2 shrink-0">
+                      <Switch
+                        data-ocid={`admin.products.switch.${i + 1}`}
+                        checked={product.isActive}
+                        onCheckedChange={() =>
+                          toggleProductMutation.mutate(product.productId)
+                        }
+                        disabled={toggleProductMutation.isPending}
+                      />
+                      <div className="flex gap-1">
+                        <Button
+                          data-ocid={`admin.products.edit_button.${i + 1}`}
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          onClick={() => {
+                            setEditProductDialog({ open: true, product });
+                            setEditName(product.name);
+                            setEditDescription(product.description);
+                            setEditPrice(String(product.price));
+                          }}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          data-ocid={`admin.products.delete_button.${i + 1}`}
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() =>
+                            setDeleteProductDialog({ open: true, product })
+                          }
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Tab 8: Payments ──────────────────────────────────────────────── */}
+        <TabsContent value="payments" className="px-4 pb-8 pt-4">
+          {/* Filter chips */}
+          <div className="flex gap-2 mb-4">
+            <button
+              type="button"
+              data-ocid="admin.payments.pending.tab"
+              onClick={() => setPaymentFilter("pending")}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                paymentFilter === "pending"
+                  ? "gradient-primary border-0 text-white"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Pending
+              {pendingPayCount > 0 && (
+                <span
+                  className={`inline-flex items-center justify-center min-w-[16px] h-4 rounded-full text-[10px] font-bold px-1 ${
+                    paymentFilter === "pending"
+                      ? "bg-white/25 text-white"
+                      : "bg-destructive text-destructive-foreground"
+                  }`}
+                >
+                  {pendingPayCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              data-ocid="admin.payments.all.tab"
+              onClick={() => setPaymentFilter("all")}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                paymentFilter === "all"
+                  ? "gradient-primary border-0 text-white"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All
+            </button>
+          </div>
+
+          {paymentsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-40 rounded-xl" />
+              ))}
+            </div>
+          ) : payments.length === 0 ? (
+            <div
+              data-ocid="admin.payments.empty_state"
+              className="text-center py-12 text-muted-foreground"
+            >
+              <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-semibold">
+                {paymentFilter === "pending"
+                  ? "No pending payments"
+                  : "No payments found"}
+              </p>
+              <p className="text-sm mt-1">
+                {paymentFilter === "pending"
+                  ? "All payments have been processed"
+                  : "Payment history will appear here"}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {payments.map((payment: PaymentRecord, i) => {
+                const payUser = userMap.get(String(payment.userId));
+                const payProduct = productMap.get(String(payment.productId));
+                const statusConfig: Record<
+                  string,
+                  { className: string; label: string }
+                > = {
+                  pending: {
+                    className: "bg-amber-50 text-amber-700 border-amber-200",
+                    label: "Pending",
+                  },
+                  confirmed: {
+                    className:
+                      "bg-emerald-50 text-emerald-700 border-emerald-200",
+                    label: "Confirmed",
+                  },
+                  rejected: {
+                    className: "bg-red-50 text-red-700 border-red-200",
+                    label: "Rejected",
+                  },
+                };
+                const sc = statusConfig[payment.status] ?? {
+                  className: "bg-muted text-muted-foreground border-border",
+                  label: payment.status,
+                };
+
+                return (
+                  <motion.div
+                    key={String(payment.paymentId)}
+                    data-ocid={`admin.payments.item.${i + 1}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.05, 0.3) }}
+                    className="bg-card border border-border rounded-xl p-4"
+                  >
+                    {/* User + status row */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <p className="font-bold text-foreground text-sm truncate">
+                            {payUser?.name ??
+                              `User …${String(payment.userId).slice(-6)}`}
+                          </p>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] capitalize border font-semibold ${sc.className}`}
+                          >
+                            {sc.label}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {payUser
+                            ? `+91 ${payUser.mobile}`
+                            : `ID: …${String(payment.userId).slice(-6)}`}
+                        </p>
+                      </div>
+                      <p className="font-display text-lg font-black text-foreground shrink-0">
+                        {formatINR(payment.amount)}
+                      </p>
+                    </div>
+
+                    {/* Product + UTR + Timestamp */}
+                    {payProduct && (
+                      <p className="text-xs text-muted-foreground mb-0.5">
+                        📦 {payProduct.name}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mb-0.5">
+                      🔑 UTR:{" "}
+                      <span className="font-mono font-semibold text-foreground">
+                        {payment.upiTransactionRef || "—"}
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      🕐 {formatDateTime(payment.timestamp)}
+                    </p>
+
+                    {/* Admin note if rejected */}
+                    {payment.status === "rejected" && payment.adminNote && (
+                      <p className="text-xs text-red-600 mb-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                        Note: {payment.adminNote}
+                      </p>
+                    )}
+
+                    {/* Action buttons for pending */}
+                    {payment.status === "pending" && (
+                      <div className="flex gap-2">
+                        <Button
+                          data-ocid={`admin.payments.confirm_button.${i + 1}`}
+                          className="flex-1 h-10 gradient-direct border-0 text-white font-semibold rounded-lg"
+                          onClick={() =>
+                            confirmPaymentMutation.mutate(payment.paymentId)
+                          }
+                          disabled={confirmPaymentMutation.isPending}
+                        >
+                          {confirmPaymentMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                              Confirm
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          data-ocid={`admin.payments.delete_button.${i + 1}`}
+                          variant="destructive"
+                          className="flex-1 h-10 font-semibold rounded-lg"
+                          onClick={() => {
+                            setRejectPaymentDialog({
+                              open: true,
+                              paymentId: payment.paymentId,
+                            });
+                            setRejectPaymentNote("");
+                          }}
+                        >
+                          <XCircle className="w-4 h-4 mr-1.5" />
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── Tab 7: Admin Access ───────────────────────────────────────────── */}
+        <TabsContent value="access" className="px-4 pb-8 pt-4">
+          <div className="space-y-5">
+            <div>
+              <h2 className="font-display text-lg font-bold text-foreground mb-1">
+                Admin Access Management
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Search for a user by mobile number to grant or remove admin
+                access.
+              </p>
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                data-ocid="admin.access.search_input"
+                placeholder="Search by mobile number..."
+                value={accessSearch}
+                onChange={(e) => setAccessSearch(e.target.value)}
+                className="pl-10 h-11"
+                type="tel"
+              />
+            </div>
+
+            {/* Results */}
+            {(() => {
+              const accessSearchTrimmed = accessSearch.trim();
+              if (!accessSearchTrimmed) {
+                return (
+                  <div
+                    data-ocid="admin.access.empty_state"
+                    className="text-center py-12 text-muted-foreground"
+                  >
+                    <UserCog className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="font-semibold">Enter a mobile number</p>
+                    <p className="text-sm mt-1">
+                      Search above to find a user and manage their admin access
+                    </p>
+                  </div>
+                );
+              }
+
+              const accessResults = (users ?? []).filter(
+                (u) =>
+                  u.mobile.includes(accessSearchTrimmed) ||
+                  u.name
+                    .toLowerCase()
+                    .includes(accessSearchTrimmed.toLowerCase()),
+              );
+
+              if (accessResults.length === 0) {
+                return (
+                  <div
+                    data-ocid="admin.access.empty_state"
+                    className="text-center py-12 text-muted-foreground"
+                  >
+                    <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                    <p className="font-semibold">No users found</p>
+                    <p className="text-sm mt-1">
+                      Try searching with a different mobile number or name
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {accessResults.slice(0, 10).map((user, i) => {
+                    const isAdmin = user.role === "admin";
+                    const hasPrincipal = !!user.principal;
+                    return (
+                      <motion.div
+                        key={String(user.userId)}
+                        data-ocid={`admin.access.item.${i + 1}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min(i * 0.04, 0.2) }}
+                        className="bg-card border border-border rounded-xl p-4"
+                      >
+                        {/* User info row */}
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <p className="font-bold text-foreground truncate">
+                                {user.name}
+                              </p>
+                              {isAdmin ? (
+                                <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] py-0 shrink-0">
+                                  Admin
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] py-0 text-muted-foreground shrink-0"
+                                >
+                                  User
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              📱 +91 {user.mobile}
+                            </p>
+                            {!hasPrincipal && (
+                              <p className="text-xs text-amber-600 mt-1 font-medium">
+                                ⚠️ User must log in at least once before admin
+                                access can be granted
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        {hasPrincipal && (
+                          <div className="flex gap-2">
+                            {!isAdmin ? (
+                              <Button
+                                data-ocid={`admin.access.confirm_button.${i + 1}`}
+                                size="sm"
+                                className="flex-1 gradient-primary border-0 text-white font-semibold rounded-lg h-9"
+                                onClick={() =>
+                                  assignRoleMutation.mutate({
+                                    principal: user.principal!,
+                                    role: UserRole__1.admin,
+                                  })
+                                }
+                                disabled={assignRoleMutation.isPending}
+                              >
+                                {assignRoleMutation.isPending ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                                    Grant Admin Access
+                                  </>
+                                )}
+                              </Button>
+                            ) : (
+                              <Button
+                                data-ocid={`admin.access.delete_button.${i + 1}`}
+                                size="sm"
+                                variant="destructive"
+                                className="flex-1 font-semibold rounded-lg h-9"
+                                onClick={() =>
+                                  assignRoleMutation.mutate({
+                                    principal: user.principal!,
+                                    role: UserRole__1.user,
+                                  })
+                                }
+                                disabled={assignRoleMutation.isPending}
+                              >
+                                {assignRoleMutation.isPending ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                                    Remove Admin Access
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -1634,7 +2499,7 @@ function AdminDashboard() {
           className="max-w-sm rounded-3xl mx-4"
         >
           <DialogHeader>
-            <DialogTitle className="font-display">Credit Income</DialogTitle>
+            <DialogTitle className="font-display">Add Credit</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Crediting to:{" "}
@@ -1869,6 +2734,71 @@ function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Reject Payment Dialog ─────────────────────────────────────────────── */}
+      <Dialog
+        open={rejectPaymentDialog.open}
+        onOpenChange={(open) => setRejectPaymentDialog((p) => ({ ...p, open }))}
+      >
+        <DialogContent
+          data-ocid="admin.payments.reject.dialog"
+          className="max-w-sm rounded-3xl mx-4"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-display">Reject Payment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Rejection Note (optional)</Label>
+            <Input
+              data-ocid="admin.payments.reject.note.input"
+              placeholder="Reason for rejection"
+              value={rejectPaymentNote}
+              onChange={(e) => setRejectPaymentNote(e.target.value)}
+              className="h-11"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && rejectPaymentDialog.paymentId) {
+                  rejectPaymentMutation.mutate({
+                    paymentId: rejectPaymentDialog.paymentId,
+                    note: rejectPaymentNote,
+                  });
+                }
+              }}
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              data-ocid="admin.payments.reject.cancel_button"
+              variant="outline"
+              onClick={() =>
+                setRejectPaymentDialog({ open: false, paymentId: null })
+              }
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              data-ocid="admin.payments.reject.confirm_button"
+              variant="destructive"
+              onClick={() => {
+                if (rejectPaymentDialog.paymentId) {
+                  rejectPaymentMutation.mutate({
+                    paymentId: rejectPaymentDialog.paymentId,
+                    note: rejectPaymentNote,
+                  });
+                }
+              }}
+              disabled={rejectPaymentMutation.isPending}
+              className="flex-1"
+            >
+              {rejectPaymentMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Reject Payment"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

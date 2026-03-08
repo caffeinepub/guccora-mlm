@@ -13,14 +13,10 @@ import Int "mo:core/Int";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
-
-
 actor {
-  let accessControlState = AccessControl.initState();
-  include MixinAuthorization(accessControlState);
-
   type UserId = Nat;
   type ProductId = Nat;
+  type PaymentId = Nat;
   type Mobile = Text;
   type TxId = Nat;
   type WithdrawalId = Nat;
@@ -96,6 +92,17 @@ actor {
     walletBalance : Float;
   };
 
+  type PaymentRecord = {
+    paymentId : PaymentId;
+    userId : UserId;
+    productId : ProductId;
+    amount : Float;
+    upiTransactionRef : Text;
+    status : Text; // "pending" | "confirmed" | "rejected"
+    timestamp : Int;
+    adminNote : Text;
+  };
+
   module User {
     public func compareByReferralCode(user1 : User, user2 : User) : Order.Order {
       Text.compare(user1.referralCode, user2.referralCode);
@@ -110,8 +117,12 @@ actor {
     };
   };
 
+  let accessControlState = AccessControl.initState();
+  include MixinAuthorization(accessControlState);
+
+  let payments = Map.empty<PaymentId, PaymentRecord>();
   let users = Map.empty<UserId, User>();
-  let usersByMobile = Map.empty<Mobile, UserId>();
+  let usersByMobile = Map.empty<Text, UserId>();
   let usersByReferralCode = Map.empty<Text, UserId>();
   let principalToUserId = Map.empty<Principal, UserId>();
   let products = Map.empty<ProductId, Product>();
@@ -123,6 +134,7 @@ actor {
   var nextProductId = 1;
   var nextTxId = 1;
   var nextWithdrawalId = 1;
+  var nextPaymentId = 1;
 
   // Helper function to convert User to UserProfile
   func userToProfile(user : User) : UserProfile {
@@ -668,6 +680,8 @@ actor {
     totalIncomeDistributed : Float;
     pendingWithdrawalsCount : Nat;
     pendingWithdrawalsAmount : Float;
+    totalPayments : Nat;
+    pendingPaymentsCount : Nat;
   } {
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can view dashboard stats");
@@ -692,12 +706,17 @@ actor {
       pendingAmount += req.amount;
     };
 
+    let allPayments = payments.values().toArray();
+    let pendingPayments = allPayments.filter(func(p : PaymentRecord) : Bool { p.status == "pending" });
+
     {
       totalUsers = allUsers.size();
       activeUsers = activeUsers.size();
       totalIncomeDistributed = totalIncome;
       pendingWithdrawalsCount = pendingWithdrawals.size();
       pendingWithdrawalsAmount = pendingAmount;
+      totalPayments = allPayments.size();
+      pendingPaymentsCount = pendingPayments.size();
     };
   };
 
@@ -826,6 +845,217 @@ actor {
     Array.tabulate<WithdrawalRequest>(
       end - start,
       func(i) { allWithdrawals[start + i] }
+    );
+  };
+
+  // Payment System
+  public shared ({ caller }) func submitPaymentRequest(userId : UserId, productId : ProductId, upiTransactionRef : Text) : async PaymentId {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can submit payment requests");
+    };
+
+    // Verify caller owns this userId
+    switch (principalToUserId.get(caller)) {
+      case (?callerUserId) {
+        if (callerUserId != userId) {
+          Runtime.trap("Unauthorized: Can only submit payment for yourself");
+        };
+      };
+      case (null) { Runtime.trap("Unauthorized: User not found") };
+    };
+
+    switch (users.get(userId)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?_) {};
+    };
+
+    switch (products.get(productId)) {
+      case (null) { Runtime.trap("Product not found") };
+      case (?product) {
+        if (not product.isActive) {
+          Runtime.trap("Product is not available");
+        };
+      };
+    };
+
+    let payment : PaymentRecord = {
+      paymentId = nextPaymentId;
+      userId;
+      productId;
+      amount = switch (products.get(productId)) {
+        case (?product) { product.price };
+        case (null) { 0.0 };
+      };
+      upiTransactionRef;
+      status = "pending";
+      timestamp = Time.now();
+      adminNote = "";
+    };
+
+    payments.add(nextPaymentId, payment);
+    nextPaymentId += 1;
+    payment.paymentId;
+  };
+
+  public shared ({ caller }) func adminConfirmPayment(paymentId : PaymentId) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can confirm payments");
+    };
+
+    switch (payments.get(paymentId)) {
+      case (null) { Runtime.trap("Payment not found") };
+      case (?payment) {
+        if (payment.status != "pending") {
+          Runtime.trap("Payment not in valid state");
+        };
+
+        // Mark payment as confirmed
+        let updatedPayment = { payment with status = "confirmed" };
+        payments.add(paymentId, updatedPayment);
+
+        // Activate user
+        switch (users.get(payment.userId)) {
+          case (null) {};
+          case (?user) {
+            let updatedUser = { user with isActive = true };
+            users.add(payment.userId, updatedUser);
+          };
+        };
+
+        // Record product purchase transaction
+        let newTx : Transaction = {
+          txId = nextTxId;
+          userId = payment.userId;
+          txType = "product_purchase";
+          amount = payment.amount;
+          fromUserId = null;
+          level = null;
+          timestamp = Time.now();
+          status = "completed";
+          note = "Product purchased";
+        };
+        transactions.add(nextTxId, newTx);
+        nextTxId += 1;
+
+        // Process direct income for sponsor (existing logic restructured)
+        switch (users.get(payment.userId)) {
+          case (?user) {
+            // Direct income
+            switch (user.sponsorId) {
+              case (?sponsorId) {
+                let directIncome = switch (payment.amount) {
+                  case (599.0) { 100.0 };
+                  case (999.0) { 150.0 };
+                  case (1999.0) { 300.0 };
+                  case (_) { 0.0 };
+                };
+                if (directIncome > 0.0) {
+                  switch (users.get(sponsorId)) {
+                    case (?sponsor) {
+                      let updatedSponsor = {
+                        sponsor with walletBalance = sponsor.walletBalance + directIncome
+                      };
+                      users.add(sponsorId, updatedSponsor);
+
+                      // Record direct income transaction for sponsor
+                      let sponsorTx : Transaction = {
+                        txId = nextTxId;
+                        userId = sponsorId;
+                        txType = "direct_income";
+                        amount = directIncome;
+                        fromUserId = ?user.userId;
+                        level = null;
+                        timestamp = Time.now();
+                        status = "completed";
+                        note = "Direct income from " # user.name;
+                      };
+                      transactions.add(nextTxId, sponsorTx);
+                      nextTxId += 1;
+                    };
+                    case (null) {};
+                  };
+                };
+              };
+              case (null) {};
+            };
+
+          };
+          case (null) {};
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func adminRejectPayment(paymentId : PaymentId, note : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can reject payments");
+    };
+
+    switch (payments.get(paymentId)) {
+      case (null) { Runtime.trap("Payment not found") };
+      case (?payment) {
+        if (payment.status != "pending") {
+          Runtime.trap("Payment not in valid state");
+        };
+        let updatedPayment = { payment with status = "rejected"; adminNote = note };
+        payments.add(paymentId, updatedPayment);
+      };
+    };
+  };
+
+  public query ({ caller }) func adminGetPaymentHistory(limit : Nat, offset : Nat) : async [PaymentRecord] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view payment history");
+    };
+
+    let allPayments = payments.values().toArray();
+    let size = allPayments.size();
+
+    let start = if (offset < size) { offset } else { size };
+    let end = if (start + limit < size) { start + limit } else { size };
+
+    Array.tabulate<PaymentRecord>(
+      end - start,
+      func(i) { allPayments[start + i] }
+    );
+  };
+
+  public query ({ caller }) func adminGetPendingPayments() : async [PaymentRecord] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view pending payments");
+    };
+
+    payments.values().toArray().filter<PaymentRecord>(
+      func(p : PaymentRecord) : Bool { p.status == "pending" }
+    );
+  };
+
+  public query ({ caller }) func getUserPayments(userId : UserId) : async [PaymentRecord] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view payments");
+    };
+
+    // Verify caller owns this userId or is admin
+    switch (principalToUserId.get(caller)) {
+      case (?callerUserId) {
+        if (callerUserId != userId and not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: Can only view your own payments");
+        };
+      };
+      case (null) {
+        if (not AccessControl.isAdmin(accessControlState, caller)) {
+          Runtime.trap("Unauthorized: User not found");
+        };
+      };
+    };
+
+    switch (users.get(userId)) {
+      case (null) { Runtime.trap("User not found") };
+      case (?_) {};
+    };
+
+    payments.values().toArray().filter<PaymentRecord>(
+      func(p : PaymentRecord) : Bool { p.userId == userId }
     );
   };
 };
