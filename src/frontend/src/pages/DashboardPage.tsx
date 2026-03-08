@@ -100,11 +100,18 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="gradient-primary px-4 pt-14 pb-6">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-white/60 text-sm">Good day,</p>
-            <h1 className="font-display text-2xl font-bold text-white">
-              {currentUser?.name?.split(" ")[0] || "Member"} 👋
-            </h1>
+          <div className="flex items-center gap-2">
+            <img
+              src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+              alt="Guccora"
+              className="w-10 h-10 object-contain"
+            />
+            <div>
+              <p className="text-white/60 text-sm">Good day,</p>
+              <h1 className="font-display text-2xl font-bold text-white">
+                {currentUser?.name?.split(" ")[0] || "Member"} 👋
+              </h1>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {currentUser?.isActive ? (

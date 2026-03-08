@@ -78,6 +78,13 @@ export default function LoginPage() {
             <p className="text-white/60 text-sm">Login to Guccora</p>
           </div>
         </div>
+        <div className="flex justify-center mt-3 mb-2">
+          <img
+            src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+            alt="Guccora"
+            className="w-16 h-16 object-contain"
+          />
+        </div>
 
         {/* Brand mark */}
         <div className="mt-4 bg-white/10 rounded-2xl p-4 text-center">

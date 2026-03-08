@@ -122,9 +122,13 @@ function AdminLogin() {
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 20 }}
-          className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center mb-4 border border-white/20"
+          className="mb-4"
         >
-          <ShieldCheck className="w-8 h-8 text-white" />
+          <img
+            src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+            alt="Guccora"
+            className="w-20 h-20 object-contain mx-auto"
+          />
         </motion.div>
         <motion.h1
           initial={{ opacity: 0, y: 8 }}
@@ -944,13 +948,20 @@ function AdminDashboard() {
       {/* Header */}
       <div className="gradient-primary px-4 pt-14 pb-4">
         <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="font-display text-2xl font-bold text-white tracking-tight">
-              Admin Panel
-            </h1>
-            <p className="text-white/60 text-xs mt-0.5">
-              Guccora Network Management
-            </p>
+          <div className="flex items-center gap-2">
+            <img
+              src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+              alt="Guccora"
+              className="w-9 h-9 object-contain"
+            />
+            <div>
+              <h1 className="font-display text-2xl font-bold text-white tracking-tight">
+                Admin Panel
+              </h1>
+              <p className="text-white/60 text-xs mt-0.5">
+                Guccora Network Management
+              </p>
+            </div>
           </div>
           <Button
             data-ocid="admin.logout.button"

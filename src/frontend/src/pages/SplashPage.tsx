@@ -25,11 +25,11 @@ export default function SplashPage() {
           }}
           className="mb-6"
         >
-          <div className="w-24 h-24 rounded-3xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center mx-auto shadow-glow-violet mb-4 overflow-hidden">
+          <div className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center mx-auto shadow-glow-violet mb-4 overflow-hidden">
             <img
-              src="/assets/generated/guccora-logo.dim_400x200.png"
-              alt="Guccora"
-              className="w-20 h-10 object-contain"
+              src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+              alt="Guccora MLM Network"
+              className="w-20 h-20 object-contain"
             />
           </div>
           <h1 className="font-display text-5xl font-black text-white tracking-tight">

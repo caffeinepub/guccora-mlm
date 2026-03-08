@@ -86,6 +86,13 @@ export default function RegisterPage() {
             <p className="text-white/60 text-sm">Join Guccora Network</p>
           </div>
         </div>
+        <div className="flex justify-center mt-3 mb-2">
+          <img
+            src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+            alt="Guccora"
+            className="w-16 h-16 object-contain"
+          />
+        </div>
       </div>
 
       {/* Form */}
