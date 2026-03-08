@@ -5,7 +5,7 @@
     <title>Guccora</title>
 
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="manifest" href="/manifest.json" />
 
     <!-- Theme color (hides browser chrome on mobile) -->
     <meta name="theme-color" content="#7c3aed" />
@@ -26,5 +26,19 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Service Worker Registration - required for PWA "Install App" prompt -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function (registration) {
+              console.log('SW registered:', registration.scope);
+            })
+            .catch(function (error) {
+              console.log('SW registration failed:', error);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
