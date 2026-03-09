@@ -25,11 +25,11 @@ export default function SplashPage() {
           }}
           className="mb-6"
         >
-          <div className="w-28 h-28 rounded-3xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center mx-auto shadow-glow-violet mb-4 overflow-hidden">
+          <div className="flex items-center justify-center mx-auto mb-4">
             <img
-              src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
+              src="/assets/uploads/file_0000000009d471fa834bd89a9a8b7499-1.png"
               alt="Guccora MLM Network"
-              className="w-20 h-20 object-contain"
+              className="w-40 h-40 object-contain"
             />
           </div>
           <h1 className="font-display text-5xl font-black text-white tracking-tight">

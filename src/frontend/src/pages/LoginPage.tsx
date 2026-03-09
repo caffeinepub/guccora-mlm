@@ -9,7 +9,14 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+declare global {
+  interface Window {
+    initSendOTP?: (config: Record<string, unknown>) => void;
+  }
+}
+
 const ADMIN_MOBILES = ["9999999999", "6305462887"];
+const WIDGET_ID = "366369725570373638343930";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -28,33 +35,83 @@ export default function LoginPage() {
       toast.error("Connecting to network...");
       return;
     }
+
     setLoading(true);
-    try {
-      const user = await actor.loginUserByMobile(mobile);
-      setCurrentUser(user);
 
-      // Admin check: hardcoded numbers, role flag, or backend check
-      let isAdmin = ADMIN_MOBILES.includes(mobile) || user.role === "admin";
-      if (!isAdmin) {
-        try {
-          isAdmin = await actor.isCallerAdmin();
-        } catch {
-          // fallback already handled above
+    // If MSG91 widget is available, use it for OTP verification
+    if (typeof window.initSendOTP === "function") {
+      window.initSendOTP({
+        widgetId: WIDGET_ID,
+        tokenAuth: "{token}",
+        identifier: mobile,
+        exposeMethods: false,
+        success: async (_data: unknown) => {
+          // OTP verified -- proceed with login
+          try {
+            const user = await actor.loginUserByMobile(mobile);
+            setCurrentUser(user);
+
+            let isAdmin =
+              ADMIN_MOBILES.includes(mobile) || user.role === "admin";
+            if (!isAdmin) {
+              try {
+                isAdmin = await actor.isCallerAdmin();
+              } catch {
+                // fallback already handled above
+              }
+            }
+
+            toast.success(`Welcome back, ${user.name}!`);
+            if (isAdmin) {
+              navigate({ to: "/admin" });
+            } else {
+              navigate({ to: "/dashboard" });
+            }
+          } catch (err: unknown) {
+            toast.error(
+              err instanceof Error
+                ? err.message
+                : "Login failed. Please try again.",
+            );
+          } finally {
+            setLoading(false);
+          }
+        },
+        failure: (_error: unknown) => {
+          toast.error("OTP verification failed. Please try again.");
+          setLoading(false);
+        },
+      });
+    } else {
+      // Fallback: direct login without OTP widget
+      try {
+        const user = await actor.loginUserByMobile(mobile);
+        setCurrentUser(user);
+
+        let isAdmin = ADMIN_MOBILES.includes(mobile) || user.role === "admin";
+        if (!isAdmin) {
+          try {
+            isAdmin = await actor.isCallerAdmin();
+          } catch {
+            // fallback already handled above
+          }
         }
-      }
 
-      toast.success(`Welcome back, ${user.name}!`);
-      if (isAdmin) {
-        navigate({ to: "/admin" });
-      } else {
-        navigate({ to: "/dashboard" });
+        toast.success(`Welcome back, ${user.name}!`);
+        if (isAdmin) {
+          navigate({ to: "/admin" });
+        } else {
+          navigate({ to: "/dashboard" });
+        }
+      } catch (err: unknown) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Login failed. Please try again.",
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : "Login failed. Please try again.",
-      );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -80,9 +137,9 @@ export default function LoginPage() {
         </div>
         <div className="flex justify-center mt-3 mb-2">
           <img
-            src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
-            alt="Guccora"
-            className="w-16 h-16 object-contain"
+            src="/assets/uploads/file_0000000009d471fa834bd89a9a8b7499-1.png"
+            alt="Guccora MLM Network"
+            className="w-36 h-20 object-contain"
           />
         </div>
 
@@ -110,7 +167,7 @@ export default function LoginPage() {
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="mobile"
-                data-ocid="login.mobile_input"
+                data-ocid="login.input"
                 placeholder="10-digit mobile number"
                 value={mobile}
                 onChange={(e) =>
@@ -130,7 +187,11 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Login"}
+            {loading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              "Send OTP & Login"
+            )}
           </Button>
         </motion.div>
       </div>

@@ -15,13 +15,13 @@
     <meta name="apple-mobile-web-app-title" content="Guccora" />
 
     <!-- Apple Touch Icon (home screen icon on iOS, no Chrome badge) -->
-    <link rel="apple-touch-icon" href="/assets/generated/pwa-icon-512.dim_512x512.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/assets/generated/pwa-icon-192.dim_192x192.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/assets/generated/pwa-icon-512.dim_512x512.png" />
+    <link rel="apple-touch-icon" href="/assets/generated/guccora-pwa-icon.dim_512x512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/assets/generated/guccora-pwa-icon.dim_192x192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/assets/generated/guccora-pwa-icon.dim_512x512.png" />
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/generated/pwa-icon-192.dim_192x192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/assets/generated/pwa-icon-512.dim_512x512.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/generated/guccora-pwa-icon.dim_192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/generated/guccora-pwa-icon.dim_512x512.png" />
   </head>
   <body>
     <div id="root"></div>
@@ -39,6 +39,23 @@
             });
         });
       }
+    </script>
+    <!-- MSG91 OTP Widget Script Loader -->
+    <script type="text/javascript">
+      (function loadOtpScript(urls) {
+        let i = 0;
+        function attempt() {
+          const s = document.createElement('script');
+          s.src = urls[i];
+          s.async = true;
+          s.onerror = () => { i++; if (i < urls.length) attempt(); };
+          document.head.appendChild(s);
+        }
+        attempt();
+      })([
+        'https://verify.msg91.com/otp-provider.js',
+        'https://verify.phone91.com/otp-provider.js'
+      ]);
     </script>
   </body>
 </html>

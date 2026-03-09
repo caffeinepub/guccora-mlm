@@ -102,9 +102,9 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img
-              src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
-              alt="Guccora"
-              className="w-10 h-10 object-contain"
+              src="/assets/uploads/file_0000000009d471fa834bd89a9a8b7499-1.png"
+              alt="Guccora MLM Network"
+              className="w-14 h-8 object-contain"
             />
             <div>
               <p className="text-white/60 text-sm">Good day,</p>

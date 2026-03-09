@@ -9,7 +9,14 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+declare global {
+  interface Window {
+    initSendOTP?: (config: Record<string, unknown>) => void;
+  }
+}
+
 const DEMO_OTP = "123456";
+const WIDGET_ID = "366369725570373638343930";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -22,24 +29,14 @@ export default function RegisterPage() {
   const [sponsorCode, setSponsorCode] = useState(search.ref || "");
   const [loading, setLoading] = useState(false);
 
-  const handleRegister = async () => {
-    if (!name.trim() || name.length < 2) {
-      toast.error("Please enter your full name");
-      return;
-    }
-    if (!/^[6-9]\d{9}$/.test(mobile)) {
-      toast.error("Enter a valid 10-digit mobile number");
-      return;
-    }
+  const doRegister = async () => {
     if (!actor) {
       toast.error("Connecting to network...");
       return;
     }
-    setLoading(true);
     try {
       const referralCode = `GUC${mobile.slice(-6)}`;
 
-      // Generate OTP; fall back to demo OTP if generation fails
       let otpToUse = DEMO_OTP;
       try {
         const generated = await actor.generateOTP(mobile);
@@ -66,6 +63,43 @@ export default function RegisterPage() {
     }
   };
 
+  const handleRegister = async () => {
+    if (!name.trim() || name.length < 2) {
+      toast.error("Please enter your full name");
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(mobile)) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
+    if (!actor) {
+      toast.error("Connecting to network...");
+      return;
+    }
+    setLoading(true);
+
+    // If MSG91 widget is available, use it for OTP verification
+    if (typeof window.initSendOTP === "function") {
+      window.initSendOTP({
+        widgetId: WIDGET_ID,
+        tokenAuth: "{token}",
+        identifier: mobile,
+        exposeMethods: false,
+        success: async (_data: unknown) => {
+          // OTP verified -- proceed with registration
+          await doRegister();
+        },
+        failure: (_error: unknown) => {
+          toast.error("OTP verification failed. Please try again.");
+          setLoading(false);
+        },
+      });
+    } else {
+      // Fallback: register without OTP widget
+      await doRegister();
+    }
+  };
+
   return (
     <div className="app-shell min-h-dvh bg-background">
       {/* Header */}
@@ -88,9 +122,9 @@ export default function RegisterPage() {
         </div>
         <div className="flex justify-center mt-3 mb-2">
           <img
-            src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
-            alt="Guccora"
-            className="w-16 h-16 object-contain"
+            src="/assets/uploads/file_0000000009d471fa834bd89a9a8b7499-1.png"
+            alt="Guccora MLM Network"
+            className="w-36 h-20 object-contain"
           />
         </div>
       </div>
@@ -110,7 +144,7 @@ export default function RegisterPage() {
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="name"
-                data-ocid="register.name_input"
+                data-ocid="register.input"
                 placeholder="Enter your full name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -177,7 +211,7 @@ export default function RegisterPage() {
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              "Register & Enter Dashboard"
+              "Verify Mobile & Register"
             )}
           </Button>
         </motion.div>

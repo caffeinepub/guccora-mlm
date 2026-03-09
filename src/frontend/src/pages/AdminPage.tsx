@@ -125,9 +125,9 @@ function AdminLogin() {
           className="mb-4"
         >
           <img
-            src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
-            alt="Guccora"
-            className="w-20 h-20 object-contain mx-auto"
+            src="/assets/uploads/file_0000000009d471fa834bd89a9a8b7499-1.png"
+            alt="Guccora MLM Network"
+            className="w-44 h-24 object-contain mx-auto"
           />
         </motion.div>
         <motion.h1
@@ -950,9 +950,9 @@ function AdminDashboard() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <img
-              src="/assets/uploads/file_000000003e8c71fab2239f767299f90d-1.png"
-              alt="Guccora"
-              className="w-9 h-9 object-contain"
+              src="/assets/uploads/file_0000000009d471fa834bd89a9a8b7499-1.png"
+              alt="Guccora MLM Network"
+              className="w-16 h-9 object-contain"
             />
             <div>
               <h1 className="font-display text-2xl font-bold text-white tracking-tight">
