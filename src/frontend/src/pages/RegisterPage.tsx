@@ -31,7 +31,6 @@ async function sendOTP(mobile: string): Promise<boolean> {
       body: JSON.stringify({
         mobile: `91${mobile}`,
         template_id: MSG91_TEMPLATE_ID,
-        otp_length: OTP_LENGTH,
       }),
     });
     const data = await res.json();
