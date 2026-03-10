@@ -6,7 +6,7 @@ import { useActor } from "@/hooks/useActor";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Link2, Loader2, Phone, User } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 const MSG91_WIDGET_ID = "366369725570373638343930";
@@ -26,12 +26,18 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsorCode, setSponsorCode] = useState(search.ref || "");
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetSending = () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    setSending(false);
+  };
 
   const doRegister = async (verifiedMobile: string) => {
+    resetSending();
     if (!actor) {
       toast.error("Connecting to network...");
-      setLoading(false);
       return;
     }
     try {
@@ -48,8 +54,6 @@ export default function RegisterPage() {
       navigate({ to: "/dashboard" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Registration failed");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -62,28 +66,39 @@ export default function RegisterPage() {
       toast.error("Enter a valid 10-digit Indian mobile number");
       return;
     }
-    if (!actor) {
-      toast.error("Connecting to network...");
-      return;
+
+    setSending(true);
+
+    // Safety net: reset button after 3 seconds if widget fails
+    resetTimer.current = setTimeout(() => {
+      setSending(false);
+      toast.error("OTP popup did not open. Please try again.");
+    }, 3000);
+
+    try {
+      window.initSendOTP?.({
+        widgetId: MSG91_WIDGET_ID,
+        identifier: `91${mobile}`,
+        success: (data: unknown) => {
+          console.log("MSG91 OTP success", data);
+          doRegister(mobile);
+        },
+        failure: (error: unknown) => {
+          console.error("MSG91 OTP failure", error);
+          resetSending();
+          toast.error("OTP verification failed. Please try again.");
+        },
+      });
+      // Reset immediately — widget manages its own UI
+      resetSending();
+    } catch (err) {
+      console.error("initSendOTP error", err);
+      resetSending();
+      toast.error("Could not open OTP popup. Please try again.");
     }
-
-    setLoading(true);
-
-    window.initSendOTP?.({
-      widgetId: MSG91_WIDGET_ID,
-      identifier: `91${mobile}`,
-      exposeMethods: true,
-      success: (data: unknown) => {
-        console.log("MSG91 OTP success", data);
-        doRegister(mobile);
-      },
-      failure: (error: unknown) => {
-        console.error("MSG91 OTP failure", error);
-        toast.error("OTP verification failed. Please try again.");
-        setLoading(false);
-      },
-    });
   };
+
+  const canSend = name.trim().length >= 2 && /^[6-9]\d{9}$/.test(mobile);
 
   return (
     <div className="app-shell min-h-dvh bg-background">
@@ -134,7 +149,6 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="pl-10 h-12"
-                disabled={loading}
               />
             </div>
           </div>
@@ -155,7 +169,6 @@ export default function RegisterPage() {
                 }
                 inputMode="numeric"
                 className="pl-10 h-12"
-                disabled={loading}
               />
             </div>
           </div>
@@ -176,7 +189,6 @@ export default function RegisterPage() {
                 value={sponsorCode}
                 onChange={(e) => setSponsorCode(e.target.value.toUpperCase())}
                 className="pl-10 h-12"
-                disabled={loading}
               />
             </div>
             {sponsorCode && (
@@ -193,18 +205,24 @@ export default function RegisterPage() {
             data-ocid="register.send_otp_button"
             size="lg"
             onClick={handleSendOTP}
-            disabled={loading}
+            disabled={!canSend}
             className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
           >
-            {loading ? (
+            {sending ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Sending OTP...
+                Opening OTP...
               </>
             ) : (
               "Send OTP to Verify"
             )}
           </Button>
+
+          {!canSend && (
+            <p className="text-xs text-center text-muted-foreground">
+              Enter your name and a valid 10-digit mobile number to continue
+            </p>
+          )}
         </motion.div>
       </div>
 
