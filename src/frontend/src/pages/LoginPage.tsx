@@ -120,7 +120,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     const verified = await verifyOTP(mobile, otp);
-    if (verified || otp === "1234") {
+    if (verified) {
       await completeLogin();
     } else {
       toast.error("Invalid OTP. Please try again.");

@@ -18,9 +18,8 @@ import { toast } from "sonner";
 
 const MSG91_AUTH_KEY = "499149Atk4qYql269af942bP1";
 const MSG91_TEMPLATE_ID = "69afa9e43d4d700e170bb6c2";
-const MSG91_SENDER_ID = "GUCCOR";
+const MSG91_SENDER = "GUCCOR";
 const OTP_LENGTH = 4;
-const DEMO_OTP = "1234";
 
 async function sendOTP(mobile: string): Promise<boolean> {
   try {
@@ -34,7 +33,7 @@ async function sendOTP(mobile: string): Promise<boolean> {
         mobile: `91${mobile}`,
         template_id: MSG91_TEMPLATE_ID,
         otp_length: OTP_LENGTH,
-        sender: MSG91_SENDER_ID,
+        sender: MSG91_SENDER,
       }),
     });
     const data = await res.json();
@@ -69,7 +68,7 @@ export default function RegisterPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const doRegister = async () => {
+  const doRegister = async (verifiedOtp: string) => {
     if (!actor) {
       toast.error("Connecting to network...");
       setLoading(false);
@@ -77,23 +76,13 @@ export default function RegisterPage() {
     }
     try {
       const referralCode = `GUC${mobile.slice(-6)}`;
-
-      let otpToUse = DEMO_OTP;
-      try {
-        const generated = await actor.generateOTP(mobile);
-        otpToUse = generated || DEMO_OTP;
-      } catch {
-        otpToUse = DEMO_OTP;
-      }
-
       const user = await actor.registerUser(
         name,
         mobile,
         referralCode,
         sponsorCode,
-        otpToUse,
+        verifiedOtp,
       );
-
       setCurrentUser(user);
       toast.success("Account created! Welcome to Guccora.");
       navigate({ to: "/dashboard" });
@@ -118,13 +107,17 @@ export default function RegisterPage() {
       return;
     }
     setLoading(true);
+    toast.loading("Sending OTP...", { id: "otp-send" });
     const sent = await sendOTP(mobile);
+    toast.dismiss("otp-send");
     setLoading(false);
     if (sent) {
       setOtpSent(true);
-      toast.success("OTP sent to your mobile number");
+      toast.success(`OTP sent to +91-${mobile}`);
     } else {
-      toast.error("Failed to send OTP. Please try again.");
+      toast.error(
+        "Failed to send OTP. Please check your number and try again.",
+      );
     }
   };
 
@@ -135,8 +128,8 @@ export default function RegisterPage() {
     }
     setLoading(true);
     const verified = await verifyOTP(mobile, otp);
-    if (verified || otp === DEMO_OTP) {
-      await doRegister();
+    if (verified) {
+      await doRegister(otp);
     } else {
       toast.error("Invalid OTP. Please try again.");
       setLoading(false);
@@ -258,7 +251,10 @@ export default function RegisterPage() {
               className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
             >
               {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  Sending OTP...
+                </>
               ) : (
                 "Send OTP to Verify"
               )}
@@ -316,7 +312,10 @@ export default function RegisterPage() {
                 className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
               >
                 {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    Verifying...
+                  </>
                 ) : (
                   "Verify & Register"
                 )}
