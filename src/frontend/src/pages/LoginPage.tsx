@@ -12,7 +12,6 @@ import { toast } from "sonner";
 const ADMIN_MOBILES = ["9999999999", "6305462887"];
 const MSG91_AUTH_KEY = "499149Atk4qYql269af942bP1";
 const MSG91_TEMPLATE_ID = "69afa9e43d4d700e170bb6c2";
-const MSG91_SENDER_ID = "GUCCOR";
 const OTP_LENGTH = 4;
 
 async function sendOTP(mobile: string): Promise<boolean> {
@@ -27,7 +26,6 @@ async function sendOTP(mobile: string): Promise<boolean> {
         mobile: `91${mobile}`,
         template_id: MSG91_TEMPLATE_ID,
         otp_length: OTP_LENGTH,
-        sender: MSG91_SENDER_ID,
       }),
     });
     const data = await res.json();
