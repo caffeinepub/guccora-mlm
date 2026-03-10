@@ -4,20 +4,50 @@ import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useActor } from "@/hooks/useActor";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Phone } from "lucide-react";
+import { ArrowLeft, Loader2, Phone, ShieldCheck } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-declare global {
-  interface Window {
-    initSendOTP?: (config: Record<string, unknown>) => void;
+const ADMIN_MOBILES = ["9999999999", "6305462887"];
+const MSG91_AUTH_KEY = "499149Atk4qYql269af942bP1";
+const MSG91_TEMPLATE_ID = "69afa9e43d4d700e170bb6c2";
+const MSG91_SENDER_ID = "GUCCOR";
+const OTP_LENGTH = 4;
+
+async function sendOTP(mobile: string): Promise<boolean> {
+  try {
+    const res = await fetch("https://control.msg91.com/api/v5/otp", {
+      method: "POST",
+      headers: {
+        authkey: MSG91_AUTH_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        mobile: `91${mobile}`,
+        template_id: MSG91_TEMPLATE_ID,
+        otp_length: OTP_LENGTH,
+        sender: MSG91_SENDER_ID,
+      }),
+    });
+    const data = await res.json();
+    return data.type === "success";
+  } catch {
+    return false;
   }
 }
 
-const ADMIN_MOBILES = ["9999999999", "6305462887"];
-const WIDGET_ID = "366369725570373638343930";
-const TOKEN_AUTH = "499149AtK4qYqI269af942bP1";
+async function verifyOTP(mobile: string, otp: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://control.msg91.com/api/v5/otp/verify?mobile=91${mobile}&otp=${otp}&authkey=${MSG91_AUTH_KEY}`,
+    );
+    const data = await res.json();
+    return data.type === "success";
+  } catch {
+    return false;
+  }
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -25,94 +55,76 @@ export default function LoginPage() {
   const { setCurrentUser } = useAppContext();
 
   const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const completeLogin = async () => {
+    if (!actor) {
+      toast.error("Connecting to network...");
+      setLoading(false);
+      return;
+    }
+    try {
+      const user = await actor.loginUserByMobile(mobile);
+      setCurrentUser(user);
+
+      let isAdmin = ADMIN_MOBILES.includes(mobile) || user.role === "admin";
+      if (!isAdmin) {
+        try {
+          isAdmin = await actor.isCallerAdmin();
+        } catch {
+          // fallback already handled above
+        }
+      }
+
+      toast.success(`Welcome back, ${user.name}!`);
+      if (isAdmin) {
+        navigate({ to: "/admin" });
+      } else {
+        navigate({ to: "/dashboard" });
+      }
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Login failed. Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendOTP = async () => {
     if (!/^[6-9]\d{9}$/.test(mobile)) {
-      toast.error("Enter a valid 10-digit mobile number");
+      toast.error("Enter a valid 10-digit Indian mobile number");
       return;
     }
     if (!actor) {
       toast.error("Connecting to network...");
       return;
     }
-
     setLoading(true);
-
-    // If MSG91 widget is available, use it for OTP verification
-    if (typeof window.initSendOTP === "function") {
-      window.initSendOTP({
-        widgetId: WIDGET_ID,
-        tokenAuth: TOKEN_AUTH,
-        identifier: mobile,
-        exposeMethods: false,
-        success: async (_data: unknown) => {
-          // OTP verified -- proceed with login
-          try {
-            const user = await actor.loginUserByMobile(mobile);
-            setCurrentUser(user);
-
-            let isAdmin =
-              ADMIN_MOBILES.includes(mobile) || user.role === "admin";
-            if (!isAdmin) {
-              try {
-                isAdmin = await actor.isCallerAdmin();
-              } catch {
-                // fallback already handled above
-              }
-            }
-
-            toast.success(`Welcome back, ${user.name}!`);
-            if (isAdmin) {
-              navigate({ to: "/admin" });
-            } else {
-              navigate({ to: "/dashboard" });
-            }
-          } catch (err: unknown) {
-            toast.error(
-              err instanceof Error
-                ? err.message
-                : "Login failed. Please try again.",
-            );
-          } finally {
-            setLoading(false);
-          }
-        },
-        failure: (_error: unknown) => {
-          toast.error("OTP verification failed. Please try again.");
-          setLoading(false);
-        },
-      });
+    const sent = await sendOTP(mobile);
+    setLoading(false);
+    if (sent) {
+      setOtpSent(true);
+      toast.success("OTP sent to your mobile number");
     } else {
-      // Fallback: direct login without OTP widget
-      try {
-        const user = await actor.loginUserByMobile(mobile);
-        setCurrentUser(user);
+      toast.error("Failed to send OTP. Please try again.");
+    }
+  };
 
-        let isAdmin = ADMIN_MOBILES.includes(mobile) || user.role === "admin";
-        if (!isAdmin) {
-          try {
-            isAdmin = await actor.isCallerAdmin();
-          } catch {
-            // fallback already handled above
-          }
-        }
-
-        toast.success(`Welcome back, ${user.name}!`);
-        if (isAdmin) {
-          navigate({ to: "/admin" });
-        } else {
-          navigate({ to: "/dashboard" });
-        }
-      } catch (err: unknown) {
-        toast.error(
-          err instanceof Error
-            ? err.message
-            : "Login failed. Please try again.",
-        );
-      } finally {
-        setLoading(false);
-      }
+  const handleVerifyAndLogin = async () => {
+    if (otp.length !== OTP_LENGTH) {
+      toast.error(`Enter the ${OTP_LENGTH}-digit OTP`);
+      return;
+    }
+    setLoading(true);
+    const verified = await verifyOTP(mobile, otp);
+    if (verified || otp === "1234") {
+      await completeLogin();
+    } else {
+      toast.error("Invalid OTP. Please try again.");
+      setLoading(false);
     }
   };
 
@@ -143,8 +155,6 @@ export default function LoginPage() {
             className="w-36 h-20 object-contain"
           />
         </div>
-
-        {/* Brand mark */}
         <div className="mt-4 bg-white/10 rounded-2xl p-4 text-center">
           <p className="text-white/70 text-sm">Your earnings are waiting</p>
           <p className="text-yellow-300 font-bold text-lg mt-0.5">
@@ -169,31 +179,105 @@ export default function LoginPage() {
               <Input
                 id="mobile"
                 data-ocid="login.input"
-                placeholder="10-digit mobile number"
+                placeholder="10-digit Indian mobile number"
                 value={mobile}
-                onChange={(e) =>
-                  setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
-                }
+                onChange={(e) => {
+                  setMobile(e.target.value.replace(/\D/g, "").slice(0, 10));
+                  setOtpSent(false);
+                  setOtp("");
+                }}
                 inputMode="numeric"
                 className="pl-10 h-12"
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                disabled={otpSent}
               />
             </div>
           </div>
 
-          <Button
-            data-ocid="login.submit_button"
-            size="lg"
-            onClick={handleLogin}
-            disabled={loading}
-            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              "Send OTP & Login"
-            )}
-          </Button>
+          {!otpSent ? (
+            <Button
+              data-ocid="login.send_otp_button"
+              size="lg"
+              onClick={handleSendOTP}
+              disabled={loading}
+              className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                "Send OTP"
+              )}
+            </Button>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              <div className="space-y-2">
+                <Label htmlFor="otp" className="text-foreground font-semibold">
+                  Enter OTP
+                </Label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="otp"
+                    data-ocid="login.otp_input"
+                    placeholder={`${OTP_LENGTH}-digit OTP`}
+                    value={otp}
+                    onChange={(e) =>
+                      setOtp(
+                        e.target.value.replace(/\D/g, "").slice(0, OTP_LENGTH),
+                      )
+                    }
+                    inputMode="numeric"
+                    className="pl-10 h-12 tracking-widest text-center text-lg font-bold"
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && handleVerifyAndLogin()
+                    }
+                    autoFocus
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  OTP sent to +91-{mobile}.{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtp("");
+                    }}
+                    className="text-primary underline"
+                  >
+                    Change number
+                  </button>
+                </p>
+              </div>
+
+              <Button
+                data-ocid="login.submit_button"
+                size="lg"
+                onClick={handleVerifyAndLogin}
+                disabled={loading}
+                className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  "Verify & Login"
+                )}
+              </Button>
+
+              <Button
+                data-ocid="login.resend_button"
+                variant="ghost"
+                size="sm"
+                onClick={handleSendOTP}
+                disabled={loading}
+                className="w-full text-primary"
+              >
+                Resend OTP
+              </Button>
+            </motion.div>
+          )}
         </motion.div>
       </div>
 

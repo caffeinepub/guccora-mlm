@@ -22,6 +22,49 @@
     <!-- Favicon -->
     <link rel="icon" type="image/png" sizes="192x192" href="/assets/generated/guccora-pwa-icon.dim_192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/assets/generated/guccora-pwa-icon.dim_512x512.png" />
+
+    <!-- MSG91 OTP Widget -->
+    <script type="text/javascript">
+      window._msg91Loaded = false;
+      window._msg91Callbacks = [];
+
+      window._onMsg91Ready = function() {
+        window._msg91Loaded = true;
+        window._msg91Callbacks.forEach(function(cb) { try { cb(); } catch(e) {} });
+        window._msg91Callbacks = [];
+      };
+
+      window._whenMsg91Ready = function(cb) {
+        if (window._msg91Loaded && typeof window.initSendOTP === 'function') {
+          cb();
+        } else {
+          window._msg91Callbacks.push(cb);
+        }
+      };
+
+      (function loadOtpScript(urls) {
+        let i = 0;
+        function attempt() {
+          const s = document.createElement('script');
+          s.src = urls[i];
+          s.async = true;
+          s.onload = function() {
+            console.log('MSG91 OTP provider loaded from:', urls[i]);
+            window._onMsg91Ready();
+          };
+          s.onerror = function() {
+            console.warn('Failed to load OTP script from:', urls[i]);
+            i++;
+            if (i < urls.length) attempt();
+          };
+          document.head.appendChild(s);
+        }
+        attempt();
+      })([
+        'https://verify.msg91.com/otp-provider.js',
+        'https://verify.phone91.com/otp-provider.js'
+      ]);
+    </script>
   </head>
   <body>
     <div id="root"></div>
@@ -39,23 +82,6 @@
             });
         });
       }
-    </script>
-    <!-- MSG91 OTP Widget Script Loader -->
-    <script type="text/javascript">
-      (function loadOtpScript(urls) {
-        let i = 0;
-        function attempt() {
-          const s = document.createElement('script');
-          s.src = urls[i];
-          s.async = true;
-          s.onerror = () => { i++; if (i < urls.length) attempt(); };
-          document.head.appendChild(s);
-        }
-        attempt();
-      })([
-        'https://verify.msg91.com/otp-provider.js',
-        'https://verify.phone91.com/otp-provider.js'
-      ]);
     </script>
   </body>
 </html>
