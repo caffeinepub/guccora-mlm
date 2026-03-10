@@ -17,6 +17,7 @@ declare global {
 
 const ADMIN_MOBILES = ["9999999999", "6305462887"];
 const WIDGET_ID = "366369725570373638343930";
+const TOKEN_AUTH = "499149AtK4qYqI269af942bP1";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ export default function LoginPage() {
     if (typeof window.initSendOTP === "function") {
       window.initSendOTP({
         widgetId: WIDGET_ID,
-        tokenAuth: "{token}",
+        tokenAuth: TOKEN_AUTH,
         identifier: mobile,
         exposeMethods: false,
         success: async (_data: unknown) => {

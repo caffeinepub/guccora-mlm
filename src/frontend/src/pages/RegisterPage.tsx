@@ -17,6 +17,7 @@ declare global {
 
 const DEMO_OTP = "123456";
 const WIDGET_ID = "366369725570373638343930";
+const TOKEN_AUTH = "499149AtK4qYqI269af942bP1";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -82,7 +83,7 @@ export default function RegisterPage() {
     if (typeof window.initSendOTP === "function") {
       window.initSendOTP({
         widgetId: WIDGET_ID,
-        tokenAuth: "{token}",
+        tokenAuth: TOKEN_AUTH,
         identifier: mobile,
         exposeMethods: false,
         success: async (_data: unknown) => {
