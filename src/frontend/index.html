@@ -23,8 +23,8 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/assets/generated/guccora-pwa-icon.dim_192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/assets/generated/guccora-pwa-icon.dim_512x512.png" />
 
-    <!-- MSG91 OTP Widget Script (loaded globally) -->
-    <script src="https://verify.msg91.com/otp-provider.js"></script>
+    <!-- MSG91 OTP Widget Script (loaded globally before app boots) -->
+    <script src="https://verify.msg91.com/otp-provider.js" async></script>
   </head>
   <body>
     <div id="root"></div>

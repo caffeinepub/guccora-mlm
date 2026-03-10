@@ -1,21 +1,15 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useActor } from "@/hooks/useActor";
+import { triggerOtpWidget } from "@/lib/msg91";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, Link2, Loader2, Phone, User } from "lucide-react";
+import { ArrowLeft, Link2, Phone, User } from "lucide-react";
 import { motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 const MSG91_WIDGET_ID = "366369725570373638343930";
-
-declare global {
-  interface Window {
-    initSendOTP?: (config: object) => void;
-  }
-}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -26,16 +20,8 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsorCode, setSponsorCode] = useState(search.ref || "");
-  const [sending, setSending] = useState(false);
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const resetSending = () => {
-    if (resetTimer.current) clearTimeout(resetTimer.current);
-    setSending(false);
-  };
 
   const doRegister = async (verifiedMobile: string) => {
-    resetSending();
     if (!actor) {
       toast.error("Connecting to network...");
       return;
@@ -58,25 +44,17 @@ export default function RegisterPage() {
   };
 
   const handleSendOTP = () => {
-    if (!name.trim() || name.length < 2) {
-      toast.error("Please enter your full name first");
+    if (!name.trim()) {
+      toast.error("Please enter your name");
       return;
     }
-    if (!/^[6-9]\d{9}$/.test(mobile)) {
-      toast.error("Enter a valid 10-digit Indian mobile number");
+    if (mobile.replace(/\D/g, "").length < 10) {
+      toast.error("Enter at least 10 digits for mobile number");
       return;
     }
 
-    setSending(true);
-
-    // Safety net: reset button after 3 seconds if widget fails
-    resetTimer.current = setTimeout(() => {
-      setSending(false);
-      toast.error("OTP popup did not open. Please try again.");
-    }, 3000);
-
-    try {
-      window.initSendOTP?.({
+    triggerOtpWidget(
+      {
         widgetId: MSG91_WIDGET_ID,
         identifier: `91${mobile}`,
         success: (data: unknown) => {
@@ -85,20 +63,14 @@ export default function RegisterPage() {
         },
         failure: (error: unknown) => {
           console.error("MSG91 OTP failure", error);
-          resetSending();
           toast.error("OTP verification failed. Please try again.");
         },
-      });
-      // Reset immediately — widget manages its own UI
-      resetSending();
-    } catch (err) {
-      console.error("initSendOTP error", err);
-      resetSending();
-      toast.error("Could not open OTP popup. Please try again.");
-    }
+      },
+      () => {
+        toast.error("OTP service unavailable. Please try again.");
+      },
+    );
   };
-
-  const canSend = name.trim().length >= 2 && /^[6-9]\d{9}$/.test(mobile);
 
   return (
     <div className="app-shell min-h-dvh bg-background">
@@ -162,7 +134,7 @@ export default function RegisterPage() {
               <Input
                 id="mobile"
                 data-ocid="register.mobile_input"
-                placeholder="10-digit Indian mobile number"
+                placeholder="10-digit mobile number"
                 value={mobile}
                 onChange={(e) =>
                   setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
@@ -201,28 +173,19 @@ export default function RegisterPage() {
             )}
           </div>
 
-          <Button
+          <button
             data-ocid="register.send_otp_button"
-            size="lg"
+            type="button"
             onClick={handleSendOTP}
-            disabled={!canSend}
-            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
+            style={{ pointerEvents: "auto", touchAction: "manipulation" }}
+            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white cursor-pointer select-none"
           >
-            {sending ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Opening OTP...
-              </>
-            ) : (
-              "Send OTP to Verify"
-            )}
-          </Button>
+            Send OTP to Verify
+          </button>
 
-          {!canSend && (
-            <p className="text-xs text-center text-muted-foreground">
-              Enter your name and a valid 10-digit mobile number to continue
-            </p>
-          )}
+          <p className="text-xs text-center text-muted-foreground">
+            Enter your name and mobile number to continue
+          </p>
         </motion.div>
       </div>
 

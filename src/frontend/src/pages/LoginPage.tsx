@@ -3,20 +3,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useActor } from "@/hooks/useActor";
+import { triggerOtpWidget } from "@/lib/msg91";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Phone } from "lucide-react";
 import { motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 const ADMIN_MOBILES = ["9999999999", "6305462887"];
 const MSG91_WIDGET_ID = "366369725570373638343930";
-
-declare global {
-  interface Window {
-    initSendOTP?: (config: object) => void;
-  }
-}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -25,17 +20,8 @@ export default function LoginPage() {
 
   const [mobile, setMobile] = useState("");
   const [loading, setLoading] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearPopupTimeout = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
 
   const completeLogin = async (verifiedMobile: string) => {
-    clearPopupTimeout();
     if (!actor) {
       toast.error("Connecting to network...");
       setLoading(false);
@@ -82,14 +68,8 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    // 3-second timeout: if the popup doesn't respond, reset the button
-    timeoutRef.current = setTimeout(() => {
-      setLoading(false);
-      toast.error("OTP popup did not open. Please try again.");
-    }, 3000);
-
-    try {
-      window.initSendOTP?.({
+    triggerOtpWidget(
+      {
         widgetId: MSG91_WIDGET_ID,
         identifier: `91${mobile}`,
         success: (data: unknown) => {
@@ -97,22 +77,20 @@ export default function LoginPage() {
           completeLogin(mobile);
         },
         failure: (error: unknown) => {
-          clearPopupTimeout();
           console.error("MSG91 OTP failure", error);
           toast.error("OTP verification failed. Please try again.");
           setLoading(false);
         },
-      });
-      // If initSendOTP was called successfully, cancel the timeout
-      // (the popup is considered "opened"; success/failure callbacks handle the rest)
-      clearPopupTimeout();
-      setLoading(false);
-    } catch (err) {
-      clearPopupTimeout();
-      console.error("initSendOTP error", err);
-      toast.error("Could not open OTP popup. Please try again.");
-      setLoading(false);
-    }
+      },
+      () => {
+        // Script never loaded after 10 seconds
+        toast.error("OTP service unavailable. Please try again.");
+        setLoading(false);
+      },
+    );
+
+    // Reset loading immediately — MSG91 widget manages its own popup UI
+    setLoading(false);
   };
 
   return (
@@ -173,7 +151,6 @@ export default function LoginPage() {
                 }
                 inputMode="numeric"
                 className="pl-10 h-12"
-                disabled={loading}
               />
             </div>
           </div>
