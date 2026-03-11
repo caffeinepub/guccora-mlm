@@ -216,7 +216,7 @@ export interface backendInterface {
     isCallerAdmin(): Promise<boolean>;
     loginUserByMobile(mobile: string): Promise<User>;
     purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
-    registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
+    registerUser(fullName: string, mobileNumber: string, sponsorCode: string): Promise<User>;
     requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
@@ -697,17 +697,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async registerUser(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string): Promise<User> {
+    async registerUser(arg0: string, arg1: string, arg2: string): Promise<User> {
         if (this.processError) {
             try {
-                const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4);
+                const result = await this.actor.registerUser(arg0, arg1, arg2);
                 return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4);
+            const result = await this.actor.registerUser(arg0, arg1, arg2);
             return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
         }
     }

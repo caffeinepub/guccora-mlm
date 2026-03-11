@@ -2,14 +2,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useActor } from "@/hooks/useActor";
-import { triggerOtpWidget } from "@/lib/msg91";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowLeft, Link2, Phone, User } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-const MSG91_WIDGET_ID = "366369725570373638343930";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -20,72 +17,37 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsorCode, setSponsorCode] = useState(search.ref || "");
-  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const doRegister = async (verifiedMobile: string) => {
+  const handleCreateAccount = async () => {
+    if (!name.trim()) {
+      toast.error("Please enter your full name");
+      return;
+    }
+    if (mobile.replace(/\D/g, "").length < 10) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
     if (!actor) {
       toast.error("Connecting to network...");
       return;
     }
+
+    setLoading(true);
     try {
-      const referralCode = `GUC${verifiedMobile.slice(-6)}`;
-      const user = await actor.registerUser(
-        name,
-        verifiedMobile,
-        referralCode,
-        sponsorCode,
-        "",
-      );
+      const user = await actor.registerUser(name, mobile, sponsorCode || "");
       setCurrentUser(user);
       toast.success("Account created! Welcome to Guccora.");
       navigate({ to: "/dashboard" });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleSendOTP = () => {
-    if (!name.trim()) {
-      toast.error("Please enter your name");
-      return;
-    }
-    if (mobile.replace(/\D/g, "").length < 10) {
-      toast.error("Enter at least 10 digits for mobile number");
-      return;
-    }
-
-    setSending(true);
-
-    const otpConfig = {
-      widgetId: MSG91_WIDGET_ID,
-      identifier: `91${mobile}`,
-      exposeMethods: true,
-      success: (data: unknown) => {
-        console.log("MSG91 OTP success", data);
-        setSending(false);
-        doRegister(mobile);
-      },
-      failure: (error: unknown) => {
-        console.error("MSG91 OTP failure", error);
-        toast.error("OTP verification failed. Please try again.");
-        setSending(false);
-      },
-    };
-
-    triggerOtpWidget(otpConfig, () => {
-      toast.error("OTP service unavailable. Please try again.");
-      setSending(false);
-    });
-
-    // Reset immediately — MSG91 widget manages its own popup UI
-    setSending(false);
   };
 
   return (
-    <div
-      className="app-shell min-h-dvh bg-background"
-      style={{ position: "relative", zIndex: 0 }}
-    >
+    <div className="app-shell min-h-dvh bg-background">
       {/* Header */}
       <div className="gradient-primary px-4 pt-14 pb-10">
         <div className="flex items-center gap-3 mb-2">
@@ -119,7 +81,6 @@ export default function RegisterPage() {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ position: "relative", zIndex: 1 }}
           className="space-y-5"
         >
           <div className="space-y-2">
@@ -130,7 +91,7 @@ export default function RegisterPage() {
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 id="name"
-                data-ocid="register.input"
+                data-ocid="register.name_input"
                 placeholder="Enter your full name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -188,23 +149,18 @@ export default function RegisterPage() {
           </div>
 
           <button
-            data-ocid="register.send_otp_button"
+            data-ocid="register.submit_button"
             type="button"
-            onClick={handleSendOTP}
-            style={{
-              pointerEvents: "auto",
-              touchAction: "manipulation",
-              position: "relative",
-              zIndex: 50,
-              cursor: "pointer",
-            }}
-            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white select-none"
+            onClick={handleCreateAccount}
+            disabled={loading}
+            style={{ touchAction: "manipulation" }}
+            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white select-none disabled:opacity-60"
           >
-            {sending ? "Opening OTP..." : "Send OTP to Verify"}
+            {loading ? "Creating Account..." : "Create Account"}
           </button>
 
           <p className="text-xs text-center text-muted-foreground">
-            Enter your name and mobile number to continue
+            Enter your details to create your Guccora account
           </p>
         </motion.div>
       </div>

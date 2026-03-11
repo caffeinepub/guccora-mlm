@@ -133,7 +133,7 @@ export interface backendInterface {
     isCallerAdmin(): Promise<boolean>;
     loginUserByMobile(mobile: string): Promise<User>;
     purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
-    registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
+    registerUser(fullName: string, mobileNumber: string, sponsorCode: string): Promise<User>;
     requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;

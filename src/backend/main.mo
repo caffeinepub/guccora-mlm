@@ -123,13 +123,6 @@ actor {
     principalToUserId.get(caller);
   };
 
-  func isRegisteredUser(caller : Principal) : Bool {
-    switch (principalToUserId.get(caller)) {
-      case (?_) { true };
-      case null { false };
-    };
-  };
-
   func isOwnerOrAdmin(caller : Principal, userId : UserId) : Bool {
     if (AccessControl.isAdmin(accessControlState, caller)) {
       return true;
@@ -147,7 +140,27 @@ actor {
     };
   };
 
-  // OTP generation - no authentication required (public service)
+  // Generate referral code from mobile number (last 6 digits)
+  func generateReferralCode(mobile : Text, userId : UserId) : Text {
+    let suffix = if (mobile.size() >= 6) {
+      let chars = mobile.chars();
+      var i = 0;
+      var result = "";
+      for (c in chars) {
+        // Use i + 6 >= mobile.size() to avoid Nat subtraction trap
+        if (i + 6 >= mobile.size()) {
+          result := result # Text.fromChar(c);
+        };
+        i += 1;
+      };
+      result;
+    } else {
+      userId.toText();
+    };
+    "GUC" # suffix;
+  };
+
+  // OTP generation - kept for potential future use
   public func generateOTP(mobile : Text) : async Text {
     let otp = "123456";
     let expiresAt = Time.now() + 600_000_000_000;
@@ -161,61 +174,42 @@ actor {
     otp;
   };
 
-  // OTP verification - internal use only, not directly callable
-  func verifyOTPInternal(mobile : Text, otp : Text) : Bool {
-    switch (otpRecords.get(mobile)) {
-      case (?record) {
-        if (record.isUsed or Time.now() > record.expiresAt or record.otp != otp) {
-          return false;
-        };
-        let updatedRecord : OTPRecord = {
-          mobile = record.mobile;
-          otp = record.otp;
-          expiresAt = record.expiresAt;
-          isUsed = true;
-        };
-        otpRecords.add(mobile, updatedRecord);
-        true;
-      };
-      case null { false };
-    };
-  };
-
+  // Register user with 3 params: fullName, mobileNumber, sponsorCode (optional)
   public shared ({ caller }) func registerUser(
-    name : Text,
-    mobile : Text,
-    referralCode : Text,
-    sponsorReferralCode : Text,
-    otp : Text,
+    fullName : Text,
+    mobileNumber : Text,
+    sponsorCode : Text,
   ) : async User {
-    // Verify OTP before registration
-    if (not verifyOTPInternal(mobile, otp)) {
-      Runtime.trap("Invalid or expired OTP");
-    };
-
-    switch (usersByMobile.get(mobile)) {
+    switch (usersByMobile.get(mobileNumber)) {
       case (?_) { Runtime.trap("Mobile already registered") };
       case null {};
-    };
-
-    switch (usersByReferralCode.get(referralCode)) {
-      case (?_) { Runtime.trap("Referral code already taken") };
-      case null {};
-    };
-
-    let sponsorId : ?UserId = switch (usersByReferralCode.get(sponsorReferralCode)) {
-      case (?sid) { ?sid };
-      case null { null };
     };
 
     let userId = nextUserId;
     nextUserId += 1;
 
+    let referralCode = generateReferralCode(mobileNumber, userId);
+
+    // If referral code already taken, append userId to make it unique
+    let finalReferralCode = switch (usersByReferralCode.get(referralCode)) {
+      case (?_) { referralCode # userId.toText() };
+      case null { referralCode };
+    };
+
+    let sponsorId : ?UserId = if (sponsorCode == "") {
+      null;
+    } else {
+      switch (usersByReferralCode.get(sponsorCode)) {
+        case (?sid) { ?sid };
+        case null { null };
+      };
+    };
+
     let user : User = {
       userId = userId;
-      name = name;
-      mobile = mobile;
-      referralCode = referralCode;
+      name = fullName;
+      mobile = mobileNumber;
+      referralCode = finalReferralCode;
       sponsorId = sponsorId;
       leftChildId = null;
       rightChildId = null;
@@ -227,8 +221,8 @@ actor {
     };
 
     users.add(userId, user);
-    usersByMobile.add(mobile, userId);
-    usersByReferralCode.add(referralCode, userId);
+    usersByMobile.add(mobileNumber, userId);
+    usersByReferralCode.add(finalReferralCode, userId);
     principalToUserId.add(caller, userId);
 
     // Assign user role in access control system
