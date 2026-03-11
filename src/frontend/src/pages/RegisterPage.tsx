@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [sponsorCode, setSponsorCode] = useState(search.ref || "");
+  const [sending, setSending] = useState(false);
 
   const doRegister = async (verifiedMobile: string) => {
     if (!actor) {
@@ -53,27 +54,38 @@ export default function RegisterPage() {
       return;
     }
 
-    triggerOtpWidget(
-      {
-        widgetId: MSG91_WIDGET_ID,
-        identifier: `91${mobile}`,
-        success: (data: unknown) => {
-          console.log("MSG91 OTP success", data);
-          doRegister(mobile);
-        },
-        failure: (error: unknown) => {
-          console.error("MSG91 OTP failure", error);
-          toast.error("OTP verification failed. Please try again.");
-        },
+    setSending(true);
+
+    const otpConfig = {
+      widgetId: MSG91_WIDGET_ID,
+      identifier: `91${mobile}`,
+      exposeMethods: true,
+      success: (data: unknown) => {
+        console.log("MSG91 OTP success", data);
+        setSending(false);
+        doRegister(mobile);
       },
-      () => {
-        toast.error("OTP service unavailable. Please try again.");
+      failure: (error: unknown) => {
+        console.error("MSG91 OTP failure", error);
+        toast.error("OTP verification failed. Please try again.");
+        setSending(false);
       },
-    );
+    };
+
+    triggerOtpWidget(otpConfig, () => {
+      toast.error("OTP service unavailable. Please try again.");
+      setSending(false);
+    });
+
+    // Reset immediately — MSG91 widget manages its own popup UI
+    setSending(false);
   };
 
   return (
-    <div className="app-shell min-h-dvh bg-background">
+    <div
+      className="app-shell min-h-dvh bg-background"
+      style={{ position: "relative", zIndex: 0 }}
+    >
       {/* Header */}
       <div className="gradient-primary px-4 pt-14 pb-10">
         <div className="flex items-center gap-3 mb-2">
@@ -81,6 +93,7 @@ export default function RegisterPage() {
             <button
               type="button"
               className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white"
+              style={{ touchAction: "manipulation" }}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -106,6 +119,7 @@ export default function RegisterPage() {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
+          style={{ position: "relative", zIndex: 1 }}
           className="space-y-5"
         >
           <div className="space-y-2">
@@ -177,10 +191,16 @@ export default function RegisterPage() {
             data-ocid="register.send_otp_button"
             type="button"
             onClick={handleSendOTP}
-            style={{ pointerEvents: "auto", touchAction: "manipulation" }}
-            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white cursor-pointer select-none"
+            style={{
+              pointerEvents: "auto",
+              touchAction: "manipulation",
+              position: "relative",
+              zIndex: 50,
+              cursor: "pointer",
+            }}
+            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white select-none"
           >
-            Send OTP to Verify
+            {sending ? "Opening OTP..." : "Send OTP to Verify"}
           </button>
 
           <p className="text-xs text-center text-muted-foreground">

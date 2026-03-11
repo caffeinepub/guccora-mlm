@@ -1,11 +1,10 @@
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useActor } from "@/hooks/useActor";
 import { triggerOtpWidget } from "@/lib/msg91";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Phone } from "lucide-react";
+import { ArrowLeft, Phone } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -19,12 +18,11 @@ export default function LoginPage() {
   const { setCurrentUser } = useAppContext();
 
   const [mobile, setMobile] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const completeLogin = async (verifiedMobile: string) => {
     if (!actor) {
       toast.error("Connecting to network...");
-      setLoading(false);
       return;
     }
     try {
@@ -51,8 +49,6 @@ export default function LoginPage() {
       toast.error(
         err instanceof Error ? err.message : "Login failed. Please try again.",
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -66,35 +62,39 @@ export default function LoginPage() {
       return;
     }
 
-    setLoading(true);
+    setSending(true);
 
-    triggerOtpWidget(
-      {
-        widgetId: MSG91_WIDGET_ID,
-        identifier: `91${mobile}`,
-        success: (data: unknown) => {
-          console.log("MSG91 OTP success", data);
-          completeLogin(mobile);
-        },
-        failure: (error: unknown) => {
-          console.error("MSG91 OTP failure", error);
-          toast.error("OTP verification failed. Please try again.");
-          setLoading(false);
-        },
+    const otpConfig = {
+      widgetId: MSG91_WIDGET_ID,
+      identifier: `91${mobile}`,
+      exposeMethods: true,
+      success: (data: unknown) => {
+        console.log("MSG91 OTP success", data);
+        setSending(false);
+        completeLogin(mobile);
       },
-      () => {
-        // Script never loaded after 10 seconds
-        toast.error("OTP service unavailable. Please try again.");
-        setLoading(false);
+      failure: (error: unknown) => {
+        console.error("MSG91 OTP failure", error);
+        toast.error("OTP verification failed. Please try again.");
+        setSending(false);
       },
-    );
+    };
 
-    // Reset loading immediately — MSG91 widget manages its own popup UI
-    setLoading(false);
+    // Call directly if available, else use polling fallback
+    triggerOtpWidget(otpConfig, () => {
+      toast.error("OTP service unavailable. Please try again.");
+      setSending(false);
+    });
+
+    // Reset immediately — MSG91 widget manages its own popup UI
+    setSending(false);
   };
 
   return (
-    <div className="app-shell min-h-dvh bg-background">
+    <div
+      className="app-shell min-h-dvh bg-background"
+      style={{ position: "relative", zIndex: 0 }}
+    >
       {/* Header */}
       <div className="gradient-primary px-4 pt-14 pb-10">
         <div className="flex items-center gap-3 mb-4">
@@ -102,6 +102,7 @@ export default function LoginPage() {
             <button
               type="button"
               className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white"
+              style={{ touchAction: "manipulation" }}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -133,6 +134,7 @@ export default function LoginPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          style={{ position: "relative", zIndex: 1 }}
           className="space-y-5"
         >
           <div className="space-y-2">
@@ -155,22 +157,21 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <Button
+          <button
             data-ocid="login.send_otp_button"
-            size="lg"
+            type="button"
             onClick={handleSendOTP}
-            disabled={loading}
-            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary border-0 text-white"
+            style={{
+              pointerEvents: "auto",
+              touchAction: "manipulation",
+              position: "relative",
+              zIndex: 50,
+              cursor: "pointer",
+            }}
+            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white select-none"
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                Opening OTP...
-              </>
-            ) : (
-              "Send OTP"
-            )}
-          </Button>
+            {sending ? "Opening OTP..." : "Send OTP"}
+          </button>
         </motion.div>
       </div>
 
