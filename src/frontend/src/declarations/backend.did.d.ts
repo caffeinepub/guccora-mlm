@@ -139,7 +139,6 @@ export interface _SERVICE {
   >,
   'getWithdrawalRequests' : ActorMethod<[UserId], Array<WithdrawalRequest>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'loginUser' : ActorMethod<[string, string], User>,
   'loginUserByMobile' : ActorMethod<[string], User>,
   'purchaseProduct' : ActorMethod<[UserId, ProductId], undefined>,
   'registerUser' : ActorMethod<[string, string, string, string, string], User>,
@@ -149,7 +148,6 @@ export interface _SERVICE {
   >,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'submitPaymentRequest' : ActorMethod<[UserId, ProductId, string], PaymentId>,
-  'verifyOTP' : ActorMethod<[string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

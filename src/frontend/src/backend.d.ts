@@ -131,12 +131,10 @@ export interface backendInterface {
     }>;
     getWithdrawalRequests(userId: UserId): Promise<Array<WithdrawalRequest>>;
     isCallerAdmin(): Promise<boolean>;
-    loginUser(mobile: string, otp: string): Promise<User>;
     loginUserByMobile(mobile: string): Promise<User>;
     purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
     registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
     requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
-    verifyOTP(mobile: string, otp: string): Promise<boolean>;
 }

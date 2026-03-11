@@ -214,14 +214,12 @@ export interface backendInterface {
     }>;
     getWithdrawalRequests(userId: UserId): Promise<Array<WithdrawalRequest>>;
     isCallerAdmin(): Promise<boolean>;
-    loginUser(mobile: string, otp: string): Promise<User>;
     loginUserByMobile(mobile: string): Promise<User>;
     purchaseProduct(userId: UserId, productId: ProductId): Promise<void>;
     registerUser(name: string, mobile: string, referralCode: string, sponsorReferralCode: string, otp: string): Promise<User>;
     requestWithdrawal(userId: UserId, amount: number, bankName: string, accountNumber: string, ifscCode: string, upiId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     submitPaymentRequest(userId: UserId, productId: ProductId, upiTransactionRef: string): Promise<PaymentId>;
-    verifyOTP(mobile: string, otp: string): Promise<boolean>;
 }
 import type { Mobile as _Mobile, Transaction as _Transaction, TxId as _TxId, User as _User, UserId as _UserId, UserProfile as _UserProfile, UserRole as _UserRole, UserType as _UserType, WithdrawalId as _WithdrawalId, WithdrawalRequest as _WithdrawalRequest } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -671,20 +669,6 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async loginUser(arg0: string, arg1: string): Promise<User> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.loginUser(arg0, arg1);
-                return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.loginUser(arg0, arg1);
-            return from_candid_User_n7(this._uploadFile, this._downloadFile, result);
-        }
-    }
     async loginUserByMobile(arg0: string): Promise<User> {
         if (this.processError) {
             try {
@@ -766,20 +750,6 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.submitPaymentRequest(arg0, arg1, arg2);
-            return result;
-        }
-    }
-    async verifyOTP(arg0: string, arg1: string): Promise<boolean> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.verifyOTP(arg0, arg1);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.verifyOTP(arg0, arg1);
             return result;
         }
     }

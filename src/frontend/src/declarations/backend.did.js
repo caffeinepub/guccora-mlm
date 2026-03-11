@@ -175,7 +175,6 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-  'loginUser' : IDL.Func([IDL.Text, IDL.Text], [User], []),
   'loginUserByMobile' : IDL.Func([IDL.Text], [User], []),
   'purchaseProduct' : IDL.Func([UserId, ProductId], [], []),
   'registerUser' : IDL.Func(
@@ -194,7 +193,6 @@ export const idlService = IDL.Service({
       [PaymentId],
       [],
     ),
-  'verifyOTP' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
 });
 
 export const idlInitArgs = [];
@@ -379,7 +377,6 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
-    'loginUser' : IDL.Func([IDL.Text, IDL.Text], [User], []),
     'loginUserByMobile' : IDL.Func([IDL.Text], [User], []),
     'purchaseProduct' : IDL.Func([UserId, ProductId], [], []),
     'registerUser' : IDL.Func(
@@ -398,7 +395,6 @@ export const idlFactory = ({ IDL }) => {
         [PaymentId],
         [],
       ),
-    'verifyOTP' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   });
 };
 
