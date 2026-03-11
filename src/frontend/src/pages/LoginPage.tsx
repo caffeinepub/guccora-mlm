@@ -2,7 +2,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useActor } from "@/hooks/useActor";
-import { triggerOtpWidget } from "@/lib/msg91";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Phone } from "lucide-react";
 import { motion } from "motion/react";
@@ -10,7 +9,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 const ADMIN_MOBILES = ["9999999999", "6305462887"];
-const MSG91_WIDGET_ID = "366369725570373638343930";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -18,24 +16,29 @@ export default function LoginPage() {
   const { setCurrentUser } = useAppContext();
 
   const [mobile, setMobile] = useState("");
-  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const completeLogin = async (verifiedMobile: string) => {
+  const handleLogin = async () => {
+    if (mobile.replace(/\D/g, "").length < 10) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
     if (!actor) {
       toast.error("Connecting to network...");
       return;
     }
+
+    setLoading(true);
     try {
-      const user = await actor.loginUserByMobile(verifiedMobile);
+      const user = await actor.loginUserByMobile(mobile);
       setCurrentUser(user);
 
-      let isAdmin =
-        ADMIN_MOBILES.includes(verifiedMobile) || user.role === "admin";
+      let isAdmin = ADMIN_MOBILES.includes(mobile) || user.role === "admin";
       if (!isAdmin) {
         try {
           isAdmin = await actor.isCallerAdmin();
         } catch {
-          // fallback already handled above
+          // fallback
         }
       }
 
@@ -49,52 +52,13 @@ export default function LoginPage() {
       toast.error(
         err instanceof Error ? err.message : "Login failed. Please try again.",
       );
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleSendOTP = () => {
-    if (!/^[6-9]\d{9}$/.test(mobile)) {
-      toast.error("Enter a valid 10-digit Indian mobile number");
-      return;
-    }
-    if (!actor) {
-      toast.error("Connecting to network...");
-      return;
-    }
-
-    setSending(true);
-
-    const otpConfig = {
-      widgetId: MSG91_WIDGET_ID,
-      identifier: `91${mobile}`,
-      exposeMethods: true,
-      success: (data: unknown) => {
-        console.log("MSG91 OTP success", data);
-        setSending(false);
-        completeLogin(mobile);
-      },
-      failure: (error: unknown) => {
-        console.error("MSG91 OTP failure", error);
-        toast.error("OTP verification failed. Please try again.");
-        setSending(false);
-      },
-    };
-
-    // Call directly if available, else use polling fallback
-    triggerOtpWidget(otpConfig, () => {
-      toast.error("OTP service unavailable. Please try again.");
-      setSending(false);
-    });
-
-    // Reset immediately — MSG91 widget manages its own popup UI
-    setSending(false);
   };
 
   return (
-    <div
-      className="app-shell min-h-dvh bg-background"
-      style={{ position: "relative", zIndex: 0 }}
-    >
+    <div className="app-shell min-h-dvh bg-background">
       {/* Header */}
       <div className="gradient-primary px-4 pt-14 pb-10">
         <div className="flex items-center gap-3 mb-4">
@@ -134,7 +98,6 @@ export default function LoginPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          style={{ position: "relative", zIndex: 1 }}
           className="space-y-5"
         >
           <div className="space-y-2">
@@ -146,7 +109,7 @@ export default function LoginPage() {
               <Input
                 id="mobile"
                 data-ocid="login.input"
-                placeholder="10-digit Indian mobile number"
+                placeholder="10-digit mobile number"
                 value={mobile}
                 onChange={(e) =>
                   setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
@@ -158,20 +121,19 @@ export default function LoginPage() {
           </div>
 
           <button
-            data-ocid="login.send_otp_button"
+            data-ocid="login.submit_button"
             type="button"
-            onClick={handleSendOTP}
-            style={{
-              pointerEvents: "auto",
-              touchAction: "manipulation",
-              position: "relative",
-              zIndex: 50,
-              cursor: "pointer",
-            }}
-            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white select-none"
+            onClick={handleLogin}
+            disabled={loading}
+            style={{ touchAction: "manipulation" }}
+            className="w-full h-14 text-base font-bold rounded-2xl gradient-primary text-white select-none disabled:opacity-60"
           >
-            {sending ? "Opening OTP..." : "Send OTP"}
+            {loading ? "Logging in..." : "Login"}
           </button>
+
+          <p className="text-xs text-center text-muted-foreground">
+            Enter your registered mobile number to login
+          </p>
         </motion.div>
       </div>
 
